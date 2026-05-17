@@ -1,0 +1,49 @@
+Act as an expert frontend engineer. I need you to build a functional React (TypeScript) MVP for a B2B SaaS platform called "RE:Fashioned". This platform acts as the sustainability data infrastructure for the fashion industry, helping brands prove compliance (like CSRD and Digital Product Passports) at the SKU level.
+
+TECH STACK:
+- React (Vite) with TypeScript
+- Tailwind CSS for all styling
+- lucide-react for icons
+- recharts for dashboard visualizations
+
+DESIGN SYSTEM:
+- Primary Color: Deep Forest Green (#12382B)
+- Accent/Success Color: Mint Green (#6AE096)
+- Background: Very light gray/off-white (#F8FAFC) for the main canvas, crisp white (#FFFFFF) for data cards.
+- Typography: Clean, sans-serif (Inter or similar).
+- UI Feel: Enterprise SaaS. Clean lines, rounded corners (rounded-lg), subtle shadows on cards.
+
+CORE LAYOUT:
+Build a persistent left-hand sidebar navigation with a dark forest green background and white text.
+The sidebar should include the logo "RE:Fashioned" at the top, followed by these navigation items: 
+1. Dashboard
+2. Lifecycle Traceability (Set this as the default active view)
+3. Brand Profile
+4. Settings
+Below the navigation, add a user profile snippet (e.g., "Emma Johnson - Sustainability Manager").
+
+VIEW 1: LIFECYCLE TRACEABILITY (Main Focus)
+This view proves we track data at the product level. 
+- Top Header: Title "Product Journey" with a dropdown to select a product (default: "Summer Collection 2023 - Essential Cotton Tee") and an "Export" button.
+- AI Copilot Mockup: Directly below the header, render a warning banner. It should have a light yellow/orange background, an alert icon, and text saying: "AI Copilot Anomaly Detected: Tier 2 processing data (Dyeing & Finishing) conflicts with OEKO-TEX certificate validity dates. Human review required." Include a "Review" button.
+- The Data Table: Build a sleek, modern table showing the lifecycle stages of this SKU. Columns should be: STAGE, LOCATION, MATERIALS, CERTIFICATIONS, and CO2 IMPACT.
+- Populate the table with this exact dummy data:
+  1. Stage: Raw Material Sourcing (Icon: Leaf), Location: Maharashtra, India, Materials: 100% Organic Cotton, Certifications: GOTS, Fair Trade, Impact: 42.3 kg CO2e
+  2. Stage: Processing & Spinning (Icon: Refresh), Location: Tamil Nadu, India, Materials: Organic Cotton Yarn, Certifications: BlueSign, Impact: 18.7 kg CO2e
+  3. Stage: Fabric Production (Icon: Scissors), Location: Tiruppur, India, Materials: Jersey Knit, Certifications: GOTS, Impact: 15.2 kg CO2e
+  4. Stage: Dyeing & Finishing (Icon: Droplet), Location: Tiruppur, India, Materials: Natural Indigo, Certifications: OEKO-TEX (make this badge red/flagged to tie into the AI warning), Impact: 8.3 kg CO2e
+
+VIEW 2: SUSTAINABILITY DASHBOARD
+- Title: "Sustainability Metrics"
+- Top Row: Three KPI summary cards. 
+  1. CO2 Saved: 847.3 tons (Trend: +12.4%)
+  2. Water Saved: 1.2M liters (Trend: +8.7%)
+  3. Recycled Materials: 76.8% (Trend: +5.2%)
+- Bottom Row: Two charts side-by-side using `recharts`.
+  1. A Bar Chart for "CO2 Reduction Trend" showing quarters Q1 through Q4 comparing "Last Year" (gray) vs "This Year" (mint green).
+  2. A Bar Chart for "Water Conservation Trend" showing similar quarterly data.
+
+REQUIREMENTS:
+- Ensure the app uses a standard routing setup or a simple state-based view switcher to toggle between the Dashboard and Lifecycle Traceability views when clicking the sidebar.
+- The code must be clean, modular (break out the Sidebar, Table, and Charts into separate functional components), and fully typed.
+- Do not use any external images; rely purely on Tailwind CSS and lucide-react icons.
