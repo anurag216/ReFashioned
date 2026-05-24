@@ -1,8 +1,10 @@
-import { LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon, Download, AlertTriangle, Leaf, RefreshCw, Scissors, Droplets, Shirt, Package, Share, Copy, QrCode, Edit2, Bell, Grid, ChevronDown, CheckCircle2, User, Camera, ScanLine, ArrowLeft, ShieldCheck, MapPin, ThumbsUp, ThumbsDown, Recycle, FileCheck, ClipboardList, TrendingUp, Clock, FileText, ChevronRight, Target, Globe, Users, Briefcase, Zap, Circle, Info, XCircle, Send, Upload, Link2, MailOpen, UserCheck, FileBadge, X, Filter, Search, ChevronDown as ChevDown, Building, MoreHorizontal, Plus, RefreshCcw, Calculator, Sliders, ArrowRight, FlameKindling } from "lucide-react";
+import { LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon, Download, AlertTriangle, Leaf, RefreshCw, Scissors, Droplets, Shirt, Package, Share, Copy, QrCode, Edit2, Bell, Grid, ChevronDown, CheckCircle2, User, Camera, ScanLine, ArrowLeft, ShieldCheck, MapPin, ThumbsUp, ThumbsDown, Recycle, FileCheck, ClipboardList, TrendingUp, Clock, FileText, ChevronRight, Target, Globe, Users, Briefcase, Zap, Circle, Info, XCircle, Send, Upload, Link2, MailOpen, UserCheck, FileBadge, X, Filter, Search, ChevronDown as ChevDown, Building, MoreHorizontal, Plus, RefreshCcw, Calculator, Sliders, ArrowRight, FlameKindling, LogOut } from "lucide-react";
 import type { ReactNode } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LineChart, Line, ReferenceLine, ComposedChart, Cell } from 'recharts';
 import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabaseClient";
+import type { Session } from "@supabase/supabase-js";
+import LoginScreen from "./LoginScreen";
 
 export function Dashboard({ onViewMetrics }: { onViewMetrics?: () => void }) {
   const [chartToggle1, setChartToggle1] = useState("Live");
@@ -2946,6 +2948,35 @@ export function SupplierPortal() {
 
 export default function App() {
   const [activeView, setActiveView] = useState("traceability");
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    if (!supabase) { setAuthLoading(false); return; }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "hsl(152 53% 8%)" }}>
+        <svg className="animate-spin w-8 h-8" style={{ color: "hsl(145 65% 66%)" }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+        </svg>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginScreen />;
+  }
 
   // DPP is full-screen — render without the shell
   if (activeView === "dpp") {
@@ -3009,14 +3040,21 @@ export default function App() {
         </div>
 
         <div className="p-4 border-t border-sidebar-border/30 mt-auto">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center shrink-0 border border-sidebar-border">
               <User className="w-5 h-5 text-sidebar-foreground/70" />
             </div>
-            <div className="overflow-hidden">
-              <p className="text-sm font-medium truncate">Emma Johnson</p>
-              <p className="text-xs text-sidebar-foreground/60 truncate">Sustainability Manager</p>
+            <div className="overflow-hidden flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{session.user.email}</p>
+              <p className="text-xs text-sidebar-foreground/60 truncate">Signed in</p>
             </div>
+            <button
+              onClick={() => supabase?.auth.signOut()}
+              title="Sign out"
+              className="shrink-0 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
@@ -3035,7 +3073,7 @@ export default function App() {
               <div className="w-8 h-8 rounded-full bg-muted border border-border flex items-center justify-center">
                 <User className="w-4 h-4 text-muted-foreground" />
               </div>
-              <span className="text-sm font-medium hidden sm:block">Emma Johnson</span>
+              <span className="text-sm font-medium hidden sm:block max-w-[160px] truncate">{session.user.email}</span>
               <ChevronDown className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>

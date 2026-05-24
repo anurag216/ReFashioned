@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import LoginScreen from "./LoginScreen";
+import App from "./App";
 import "./index.css";
 
-createRoot(document.getElementById("root")!).render(<LoginScreen />);
+createRoot(document.getElementById("root")!).render(<App />);
