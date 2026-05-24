@@ -2325,8 +2325,8 @@ export function SupplierPortal() {
 
   type SupplierStatus = "active" | "needs-action" | "pending" | "invited" | "not-invited";
 
-  const suppliers: {
-    id: number;
+  type SupplierRow = {
+    id: string | number;
     name: string;
     contact: string;
     location: string;
@@ -2336,69 +2336,58 @@ export function SupplierPortal() {
     certs: { name: string; status: "uploaded" | "missing" | "expiring" }[];
     dataCompleteness: number;
     lastActivity: string;
-    joinedDate?: string;
-  }[] = [
-    {
-      id: 1, name: "EcoFibers Cooperative", contact: "Priya Sharma", location: "Maharashtra, India",
-      tier: 1, status: "active", stage: "Raw Material Sourcing",
-      certs: [{ name: "GOTS", status: "uploaded" }, { name: "Fair Trade", status: "uploaded" }, { name: "OEKO-TEX", status: "uploaded" }],
-      dataCompleteness: 100, lastActivity: "2 days ago", joinedDate: "Mar 2021",
-    },
-    {
-      id: 2, name: "EcoSpin Facility", contact: "Rajan Nair", location: "Tamil Nadu, India",
-      tier: 1, status: "active", stage: "Processing & Spinning",
-      certs: [{ name: "BlueSign", status: "uploaded" }, { name: "ZDHC", status: "uploaded" }],
-      dataCompleteness: 94, lastActivity: "5 days ago", joinedDate: "Jan 2021",
-    },
-    {
-      id: 3, name: "GreenWeave Mills", contact: "Anita Patel", location: "Tiruppur, India",
-      tier: 1, status: "active", stage: "Fabric Production",
-      certs: [{ name: "GOTS", status: "uploaded" }, { name: "BlueSign", status: "uploaded" }, { name: "REACH", status: "missing" }],
-      dataCompleteness: 88, lastActivity: "1 week ago", joinedDate: "Jun 2021",
-    },
-    {
-      id: 4, name: "EcoDye Facility", contact: "Suresh Kumar", location: "Tiruppur, India",
-      tier: 1, status: "needs-action", stage: "Dyeing & Finishing",
-      certs: [{ name: "ZDHC", status: "uploaded" }, { name: "OEKO-TEX", status: "expiring" }, { name: "BlueSign", status: "missing" }],
-      dataCompleteness: 61, lastActivity: "3 weeks ago", joinedDate: "Aug 2021",
-    },
-    {
-      id: 5, name: "FairStitch Factory", contact: "Mohammad Islam", location: "Dhaka, Bangladesh",
-      tier: 1, status: "active", stage: "Garment Manufacturing",
-      certs: [{ name: "Fair Trade", status: "uploaded" }, { name: "SA8000", status: "uploaded" }],
-      dataCompleteness: 97, lastActivity: "1 day ago", joinedDate: "Nov 2020",
-    },
-    {
-      id: 6, name: "Sunrise Ginning Co.", contact: "Amit Desai", location: "Gujarat, India",
-      tier: 2, status: "pending", stage: "Raw Material — Tier 2",
-      certs: [{ name: "GOTS", status: "missing" }, { name: "Fair Trade", status: "missing" }],
-      dataCompleteness: 22, lastActivity: "Invitation sent 4 days ago",
-    },
-    {
-      id: 7, name: "IndoThread Processors", contact: "Deepa Krishnan", location: "Tamil Nadu, India",
-      tier: 2, status: "pending", stage: "Yarn Processing — Tier 2",
-      certs: [{ name: "BlueSign", status: "missing" }],
-      dataCompleteness: 35, lastActivity: "Partial data uploaded",
-    },
-    {
-      id: 8, name: "Coastal Chemicals Ltd.", contact: "—", location: "Tiruppur, India",
-      tier: 2, status: "invited", stage: "Chemical Supply — Tier 2",
-      certs: [{ name: "REACH", status: "missing" }, { name: "ZDHC", status: "missing" }],
-      dataCompleteness: 0, lastActivity: "Invitation sent 2 weeks ago",
-    },
-    {
-      id: 9, name: "Green Logistics Partners", contact: "—", location: "Rotterdam, Netherlands",
-      tier: 3, status: "not-invited", stage: "Logistics — Tier 3",
-      certs: [{ name: "ISO 14001", status: "missing" }],
-      dataCompleteness: 0, lastActivity: "Not yet onboarded",
-    },
-    {
-      id: 10, name: "Horizon Packaging", contact: "—", location: "Dhaka, Bangladesh",
-      tier: 3, status: "not-invited", stage: "Packaging — Tier 3",
-      certs: [{ name: "FSC", status: "missing" }, { name: "Plastic-Free", status: "missing" }],
-      dataCompleteness: 0, lastActivity: "Not yet onboarded",
-    },
-  ];
+  };
+
+  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchSuppliers() {
+      setLoading(true);
+      setFetchError(null);
+
+      if (!supabase) {
+        setFetchError("Supabase credentials not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Replit Secrets.");
+        setSuppliers([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("suppliers")
+        .select("id, name, contact_name, location, tier, status, stage, data_completeness, last_activity")
+        .order("tier", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error) {
+        setFetchError(error.message);
+        setSuppliers([]);
+      } else {
+        const mapped: SupplierRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
+          id:               r.id as string | number,
+          name:             (r.name          as string) ?? "—",
+          contact:          (r.contact_name  as string) ?? "—",
+          location:         (r.location      as string) ?? "—",
+          tier:             (r.tier          as 1 | 2 | 3) ?? 1,
+          status:           (r.status        as SupplierStatus) ?? "not-invited",
+          stage:            (r.stage         as string) ?? "—",
+          certs:            [],
+          dataCompleteness: (r.data_completeness as number) ?? 0,
+          lastActivity:     (r.last_activity as string) ?? "—",
+        }));
+        setSuppliers(mapped);
+      }
+
+      setLoading(false);
+    }
+
+    fetchSuppliers();
+    return () => { cancelled = true; };
+  }, []);
 
   const statusConfig: Record<SupplierStatus, { label: string; color: string; bg: string; border: string; dot: string }> = {
     "active":       { label: "Active",        color: "text-green-700",  bg: "bg-green-50",  border: "border-green-200",  dot: "bg-green-500"  },
@@ -2513,15 +2502,33 @@ export function SupplierPortal() {
       {/* Supplier table */}
       <div className="bg-card rounded-xl shadow-sm border border-card-border overflow-hidden">
         <div className="px-6 py-3 border-b border-border bg-gray-50/50 flex items-center justify-between">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{filteredSuppliers.length} suppliers</span>
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {loading ? "Loading…" : `${filteredSuppliers.length} suppliers`}
+          </span>
           <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <RefreshCcw className="w-3.5 h-3.5" /> Sync data
           </button>
         </div>
 
-        {filteredSuppliers.length === 0 ? (
+        {/* Loading spinner */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            <p className="text-sm text-muted-foreground">Fetching supplier data…</p>
+          </div>
+        )}
+
+        {/* Error state */}
+        {!loading && fetchError && (
+          <div className="m-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+            <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+            <p className="text-sm text-red-800"><span className="font-semibold">Failed to load suppliers.</span> {fetchError}</p>
+          </div>
+        )}
+
+        {!loading && !fetchError && filteredSuppliers.length === 0 ? (
           <div className="py-16 text-center text-muted-foreground text-sm">No suppliers match your filter.</div>
-        ) : (
+        ) : !loading && !fetchError ? (
           <div className="divide-y divide-border">
             {filteredSuppliers.map(s => {
               const sc = statusConfig[s.status];
@@ -2621,7 +2628,7 @@ export function SupplierPortal() {
               );
             })}
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Onboarding checklist summary */}
