@@ -345,8 +345,6 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
   const [rows, setRows] = useState<TraceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [debugRaw, setDebugRaw] = useState<unknown>(undefined);
-  const [debugErrorCode, setDebugErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -357,8 +355,6 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
 
       if (!supabase) {
         setFetchError("Supabase credentials not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Replit Secrets.");
-        setDebugRaw(null);
-        setDebugErrorCode(null);
         setRows([]);
         setLoading(false);
         return;
@@ -384,9 +380,6 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
         .order("stage_order", { ascending: true });
 
       if (cancelled) return;
-
-      setDebugRaw(data);
-      setDebugErrorCode(error ? ((error as Record<string, unknown>).code as string ?? null) : null);
 
       if (error) {
         setFetchError(error.message);
@@ -435,39 +428,8 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
 
   const hasFlagged = rows.some(r => r.flagged);
 
-  const debugHasUrl = !!import.meta.env.VITE_SUPABASE_URL;
-  const debugHasKey = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
-
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* TEMPORARY DEBUG BANNER — remove when done */}
-      <div className="rounded-lg border-2 border-yellow-400 bg-yellow-50 p-4 space-y-2 text-xs font-mono">
-        <p className="font-bold text-yellow-800 text-sm">🐛 DEBUG BANNER (temporary)</p>
-        <p>
-          <span className="font-semibold">VITE_SUPABASE_URL loaded:</span>{" "}
-          <span className={debugHasUrl ? "text-green-700 font-bold" : "text-red-700 font-bold"}>
-            {debugHasUrl ? "true ✓" : "false ✗"}
-          </span>
-        </p>
-        <p>
-          <span className="font-semibold">VITE_SUPABASE_ANON_KEY loaded:</span>{" "}
-          <span className={debugHasKey ? "text-green-700 font-bold" : "text-red-700 font-bold"}>
-            {debugHasKey ? "true ✓" : "false ✗"}
-          </span>
-        </p>
-        <p>
-          <span className="font-semibold">Supabase error:</span>{" "}
-          {fetchError
-            ? <span className="text-red-700">{fetchError}{debugErrorCode ? ` (code: ${debugErrorCode})` : ""}</span>
-            : <span className="text-green-700">none</span>}
-        </p>
-        <div>
-          <p className="font-semibold mb-1">Raw data from Supabase ({`product_id = ${selectedProduct}`}):</p>
-          <pre className="bg-yellow-100 rounded p-2 overflow-x-auto whitespace-pre-wrap break-all text-yellow-900">
-            {debugRaw === undefined ? "(loading…)" : JSON.stringify(debugRaw, null, 2)}
-          </pre>
-        </div>
-      </div>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Product Journey</h1>
