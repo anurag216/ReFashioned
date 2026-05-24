@@ -1304,6 +1304,32 @@ function ComplianceRing({ score }: { score: number }) {
 export function CSRDReport() {
   const [expandedSection, setExpandedSection] = useState<string | null>("e1");
   const [reportYear, setReportYear] = useState("2023");
+  const [dbLoading, setDbLoading] = useState(true);
+  const [scope3Live, setScope3Live] = useState<number | null>(null);
+  const [waterLive, setWaterLive] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchEmissions() {
+      setDbLoading(true);
+      if (!supabase) { setDbLoading(false); return; }
+      const { data, error } = await supabase
+        .from("lifecycle_stages")
+        .select("co2_impact_kg, water_usage_l");
+      if (cancelled) return;
+      if (!error && data && data.length > 0) {
+        const co2Sum = (data as { co2_impact_kg: number | null }[])
+          .reduce((acc, r) => acc + (r.co2_impact_kg ?? 0), 0);
+        const waterSum = (data as { water_usage_l: number | null }[])
+          .reduce((acc, r) => acc + (r.water_usage_l ?? 0), 0);
+        setScope3Live(Math.round(co2Sum * 10) / 10);
+        setWaterLive(Math.round(waterSum));
+      }
+      setDbLoading(false);
+    }
+    fetchEmissions();
+    return () => { cancelled = true; };
+  }, []);
 
   const yearData = {
     "2023": {
@@ -1344,7 +1370,24 @@ export function CSRDReport() {
 
   const yd = yearData[reportYear as keyof typeof yearData];
   const overallScore = yd.overallScore;
-  const scopeData = yd.scopeData;
+  const scope1t = yd.scopeData[0].tonnes;
+  const scope2t = yd.scopeData[1].tonnes;
+  const scope3t = scope3Live ?? yd.scopeData[2].tonnes;
+  const totalCo2t = Math.round((scope1t + scope2t + scope3t) * 10) / 10;
+  const totalCo2Display = totalCo2t >= 1000
+    ? `${(totalCo2t / 1000).toFixed(1)}k`
+    : `${totalCo2t}`;
+  const totalWaterDisplay = waterLive != null
+    ? waterLive >= 1_000_000 ? `${(waterLive / 1_000_000).toFixed(1)}M` : waterLive.toLocaleString()
+    : "1.2M";
+  const scope3Pct = totalCo2t > 0 ? `${Math.round((scope3t / totalCo2t) * 1000) / 10}%` : "—";
+  const scope2Pct = totalCo2t > 0 ? `${Math.round((scope2t / totalCo2t) * 1000) / 10}%` : "—";
+  const scope1Pct = totalCo2t > 0 ? `${Math.round((scope1t / totalCo2t) * 1000) / 10}%` : "—";
+  const scopeData = [
+    { scope: "Scope 1", tonnes: scope1t, fill: "#12382B" },
+    { scope: "Scope 2", tonnes: scope2t, fill: "#6AE096" },
+    { scope: "Scope 3", tonnes: scope3t, fill: "#94A3B8" },
+  ];
 
   const esrsDisclosures = [
     {
@@ -1358,9 +1401,9 @@ export function CSRDReport() {
       score: 82,
       status: "on-track" as const,
       dataPoints: [
-        { label: "Scope 1 Emissions (Direct)", value: "12.4 t CO₂e", status: "complete" as const },
-        { label: "Scope 2 Emissions (Energy)", value: "28.7 t CO₂e", status: "complete" as const },
-        { label: "Scope 3 Emissions (Supply Chain)", value: "806.2 t CO₂e", status: "complete" as const },
+        { label: "Scope 1 Emissions (Direct)", value: `${scope1t} t CO₂e`, status: "complete" as const },
+        { label: "Scope 2 Emissions (Energy)", value: `${scope2t} t CO₂e`, status: "complete" as const },
+        { label: "Scope 3 Emissions (Supply Chain)", value: `${scope3t} t CO₂e`, status: "complete" as const },
         { label: "Climate Transition Plan", value: "Net Zero by 2040", status: "complete" as const },
         { label: "Science-Based Target (SBTi)", value: "Validation pending", status: "pending" as const },
         { label: "Physical Risk Assessment", value: "Not started", status: "missing" as const },
@@ -1535,6 +1578,17 @@ export function CSRDReport() {
         </div>
       </div>
 
+      {/* Loading banner */}
+      {dbLoading && (
+        <div className="flex items-center gap-3 bg-primary/5 border border-primary/15 rounded-lg px-4 py-3">
+          <svg className="animate-spin w-4 h-4 text-primary shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          <p className="text-sm text-primary font-medium">Fetching live emissions data from database…</p>
+        </div>
+      )}
+
       {/* Compliance overview card */}
       <div className="bg-card rounded-xl shadow-sm border border-card-border p-6">
         <div className="flex flex-col lg:flex-row gap-8 items-center lg:items-start">
@@ -1589,11 +1643,11 @@ export function CSRDReport() {
           {/* Key metrics */}
           <div className="grid grid-cols-2 gap-3 shrink-0 lg:w-48">
             <div className="bg-muted/40 rounded-lg p-3 border border-border text-center">
-              <p className="text-xl font-bold text-foreground">847.3</p>
+              <p className="text-xl font-bold text-foreground">{dbLoading ? <span className="text-base animate-pulse text-muted-foreground">…</span> : totalCo2Display}</p>
               <p className="text-xs text-muted-foreground mt-0.5">Tonnes CO₂e</p>
             </div>
             <div className="bg-muted/40 rounded-lg p-3 border border-border text-center">
-              <p className="text-xl font-bold text-foreground">1.2M</p>
+              <p className="text-xl font-bold text-foreground">{dbLoading ? <span className="text-base animate-pulse text-muted-foreground">…</span> : totalWaterDisplay}</p>
               <p className="text-xs text-muted-foreground mt-0.5">Litres water</p>
             </div>
             <div className="bg-muted/40 rounded-lg p-3 border border-border text-center">
@@ -1618,7 +1672,7 @@ export function CSRDReport() {
               <h3 className="text-sm font-semibold text-foreground">GHG Emissions by Scope</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Tonnes CO₂e — {reportYear} reporting period</p>
             </div>
-            <span className="text-xs bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-medium border border-primary/20">847.3 t total</span>
+            <span className="text-xs bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-medium border border-primary/20">{dbLoading ? "…" : `${totalCo2t} t total`}</span>
           </div>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={scopeData} barSize={48}>
@@ -1638,9 +1692,9 @@ export function CSRDReport() {
           </ResponsiveContainer>
           <div className="mt-4 space-y-2">
             {[
-              { label: "Scope 1 — Direct emissions (fuel, fleet)", val: "12.4 t", pct: "1.5%", color: "bg-primary" },
-              { label: "Scope 2 — Purchased energy", val: "28.7 t", pct: "3.4%", color: "bg-accent" },
-              { label: "Scope 3 — Value chain (upstream + downstream)", val: "806.2 t", pct: "95.1%", color: "bg-slate-300" },
+              { label: "Scope 1 — Direct emissions (fuel, fleet)", val: `${scope1t} t`, pct: scope1Pct, color: "bg-primary" },
+              { label: "Scope 2 — Purchased energy", val: `${scope2t} t`, pct: scope2Pct, color: "bg-accent" },
+              { label: "Scope 3 — Value chain (upstream + downstream)", val: dbLoading ? "…" : `${scope3t} t`, pct: dbLoading ? "…" : scope3Pct, color: "bg-slate-300" },
             ].map((s, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className={`w-2.5 h-2.5 rounded-sm shrink-0 ${s.color}`} />
