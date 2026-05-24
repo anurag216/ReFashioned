@@ -218,7 +218,7 @@ interface TraceRow {
 }
 
 export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
-  const [selectedProduct, setSelectedProduct] = useState("cotton-tee");
+  const [selectedProduct, setSelectedProduct] = useState("f1111111-1111-1111-1111-111111111111");
   const [rows, setRows] = useState<TraceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -299,8 +299,8 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
   }, [selectedProduct]);
 
   const productLabels: Record<string, string> = {
-    "cotton-tee":   "Summer Collection 2023 — Essential Cotton Tee",
-    "wool-sweater": "Winter Collection 2023 — Merino Wool Sweater",
+    "f1111111-1111-1111-1111-111111111111": "Summer Collection 2023 — Essential Cotton Tee",
+    "f2222222-2222-2222-2222-222222222222": "Winter Collection 2023 — Merino Wool Sweater",
   };
 
   const hasFlagged = rows.some(r => r.flagged);
