@@ -12,6 +12,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(true);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,7 +28,13 @@ export default function LoginScreen() {
 
     if (mode === "sign-in") {
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-      if (err) setError(err.message);
+      if (err) {
+        setError(err.message);
+      } else if (!rememberMe) {
+        Object.keys(localStorage)
+          .filter(k => k.startsWith("sb-"))
+          .forEach(k => localStorage.removeItem(k));
+      }
     } else if (mode === "sign-up") {
       if (password !== confirmPassword) {
         setError("Passwords do not match.");
@@ -223,9 +230,44 @@ export default function LoginScreen() {
             </div>
           )}
 
-          {/* Forgot password link */}
+          {/* Forgot password + Remember me row */}
           {mode === "sign-in" && (
-            <div className="flex justify-end -mt-1">
+            <div className="flex items-center justify-between -mt-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none group">
+                <span
+                  className="relative flex items-center justify-center w-4 h-4 rounded shrink-0 transition-colors"
+                  style={{
+                    background: rememberMe ? "hsl(145 65% 66%)" : "transparent",
+                    border: rememberMe
+                      ? "1px solid hsl(145 65% 66%)"
+                      : "1px solid hsl(152 40% 30%)",
+                  }}
+                >
+                  {rememberMe && (
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 10 10" fill="none">
+                      <path
+                        d="M1.5 5L4 7.5L8.5 2.5"
+                        stroke="hsl(152 53% 11%)"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  )}
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={e => setRememberMe(e.target.checked)}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                </span>
+                <span
+                  className="text-xs transition-colors"
+                  style={{ color: "hsl(0 0% 95% / 0.55)" }}
+                >
+                  Remember me
+                </span>
+              </label>
               <button
                 type="button"
                 onClick={() => switchMode("forgot-password")}
