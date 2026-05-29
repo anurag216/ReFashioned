@@ -76,14 +76,16 @@ export function ProductCatalog() {
       .from("organization_members")
       .select("organization_id")
       .eq("profile_id", user.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (memberError) {
       setSaveError(`organization_members lookup failed: ${memberError.message} (code: ${memberError.code})`);
       setSaving(false);
       return;
     }
-    if (!member) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(member as any)?.organization_id) {
       setSaveError(`No organization_members row found for profile_id = ${user.id}`);
       setSaving(false);
       return;
