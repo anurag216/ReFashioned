@@ -27,11 +27,17 @@ Every table has:
 - `XxxUpdate` = `Partial<XxxInsert>` — use for `.update()` calls
 - Exception: `ProfileInsert` does NOT omit `id` (auth.users.id must be supplied)
 
+## CRITICAL: Relationships must be `any[]`, not `[]`
+
+`@supabase/postgrest-js` v2.106+ requires every table entry in `Database["public"]["Tables"]` to have `Relationships: GenericRelationship[]`. Using `[]` (empty tuple) does NOT satisfy the `GenericTable` constraint — TypeScript resolves `from("table")` as `never`, causing `insert()` to expect `never[]` and query data to be `never`. Use `Relationships: any[]` to satisfy the constraint.
+
+**Why:** `any[]` satisfies `GenericRelationship[]` because `any` is the universal type. `[]` (empty tuple) fails the constraint check at the generic level in TS 5.9 + postgrest-js 2.106.
+
 ## Adding a new table
 
 1. Add a `Row` interface to `types.ts`
 2. Add `XxxInsert` and `XxxUpdate` helper types
-3. Add the entry to the `Database["public"]["Tables"]` object in `types.ts`
+3. Add the entry to `Database["public"]["Tables"]` with `Relationships: any[]`
 4. No changes needed to `supabaseClient.ts` — the generic picks it up automatically
 
 ## Typed client usage

@@ -139,43 +139,50 @@ export type Database = {
         Row:           Organization;
         Insert:        OrganizationInsert;
         Update:        OrganizationUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
       profiles: {
         Row:           Profile;
         Insert:        ProfileInsert;
         Update:        ProfileUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
       products: {
         Row:           Product;
         Insert:        ProductInsert;
         Update:        ProductUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
       suppliers: {
         Row:           Supplier;
         Insert:        SupplierInsert;
         Update:        SupplierUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
       lifecycle_stages: {
         Row:           LifecycleStage;
         Insert:        LifecycleStageInsert;
         Update:        LifecycleStageUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
       digital_product_passports: {
         Row:           DigitalProductPassport;
         Insert:        DigitalProductPassportInsert;
         Update:        DigitalProductPassportUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
       organization_members: {
         Row:           OrganizationMember;
         Insert:        OrganizationMemberInsert;
         Update:        OrganizationMemberUpdate;
-        Relationships: [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Relationships: any[];
       };
     };
     Views:     Record<string, never>;
