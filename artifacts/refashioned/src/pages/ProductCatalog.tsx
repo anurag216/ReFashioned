@@ -75,13 +75,16 @@ export function ProductCatalog() {
     const { data: member, error: memberError } = await client
       .from("organization_members")
       .select("organization_id")
-      .eq("user_id", user.id)
+      .eq("profile_id", user.id)
       .single();
 
-    if (memberError || !member) {
-      setSaveError(
-        "Could not determine your organization. Make sure your account is linked to an organization."
-      );
+    if (memberError) {
+      setSaveError(`organization_members lookup failed: ${memberError.message} (code: ${memberError.code})`);
+      setSaving(false);
+      return;
+    }
+    if (!member) {
+      setSaveError(`No organization_members row found for profile_id = ${user.id}`);
       setSaving(false);
       return;
     }
