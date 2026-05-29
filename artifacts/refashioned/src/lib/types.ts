@@ -32,7 +32,7 @@ export interface Product {
   name: string;
   sku: string | null;
   season: string | null;
-  category: string | null;
+
   description: string | null;
   status: "draft" | "in_review" | "published";
   image_url: string | null;

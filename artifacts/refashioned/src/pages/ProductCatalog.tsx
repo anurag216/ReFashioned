@@ -102,7 +102,7 @@ export function ProductCatalog() {
         status:               form.status,
         organization_id:      (member as any).organization_id as string,
         created_by:           user.id,
-        category:             null,
+
         description:          null,
         image_url:            null,
         material_composition: null,
