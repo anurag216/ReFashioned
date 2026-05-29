@@ -96,17 +96,11 @@ export function ProductCatalog() {
     const { error: insertError } = await client
       .from("products")
       .insert({
-        name:                 form.name.trim(),
-        sku:                  form.sku.trim()    || null,
-        season:               form.season.trim() || null,
-        status:               form.status,
-        organization_id:      (member as any).organization_id as string,
-        created_by:           user.id,
-
-        description:          null,
-        image_url:            null,
-        material_composition: null,
-        country_of_origin:    null,
+        name:            form.name.trim(),
+        sku:             form.sku.trim()    || null,
+        season:          form.season.trim() || null,
+        status:          form.status,
+        organization_id: (member as any).organization_id as string,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 

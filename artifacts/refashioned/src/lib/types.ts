@@ -32,13 +32,7 @@ export interface Product {
   name: string;
   sku: string | null;
   season: string | null;
-
-  description: string | null;
   status: "draft" | "in_review" | "published";
-  image_url: string | null;
-  material_composition: Record<string, number> | null;  // e.g. { cotton: 80, polyester: 20 }
-  country_of_origin: string | null;
-  created_by: string | null;   // references profiles.id
   created_at: string;
   updated_at: string;
 }
