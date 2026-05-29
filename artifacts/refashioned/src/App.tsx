@@ -186,7 +186,7 @@ export default function App() {
                 <ProductCatalog />
               </Route>
               <Route path="/traceability">
-                <Traceability onViewDPP={() => setLocation("/passport")} />
+                <Traceability onViewDPP={(id) => setLocation(`/passport?productId=${id}`)} />
               </Route>
               <Route path="/suppliers">
                 <SupplierPortal />

@@ -35,16 +35,34 @@ interface TraceRow {
   flagged: boolean;
 }
 
-export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
-  const [selectedProduct, setSelectedProduct] = useState("f1111111-1111-1111-1111-111111111111");
+export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) => void }) {
+  const [products, setProducts] = useState<{ id: string; name: string; sku: string | null }[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState("");
   const [rows, setRows] = useState<TraceRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supabase) { setProductsLoading(false); return; }
+    const client = supabase;
+    client
+      .from("products")
+      .select("id, name, sku")
+      .order("name")
+      .then(({ data }) => {
+        const list = (data ?? []) as { id: string; name: string; sku: string | null }[];
+        setProducts(list);
+        if (list.length > 0) setSelectedProduct(list[0].id);
+        setProductsLoading(false);
+      });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function fetchStages() {
+      if (!selectedProduct) { setRows([]); setLoading(false); return; }
       setLoading(true);
       setFetchError(null);
 
@@ -116,11 +134,6 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
     return () => { cancelled = true; };
   }, [selectedProduct]);
 
-  const productLabels: Record<string, string> = {
-    "f1111111-1111-1111-1111-111111111111": "Summer Collection 2023 — Essential Cotton Tee",
-    "f2222222-2222-2222-2222-222222222222": "Winter Collection 2023 — Merino Wool Sweater",
-  };
-
   const hasFlagged = rows.some(r => r.flagged);
 
   return (
@@ -137,12 +150,19 @@ export function Traceability({ onViewDPP }: { onViewDPP?: () => void }) {
             onChange={e => setSelectedProduct(e.target.value)}
             className="bg-white border border-border rounded-md px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-72"
           >
-            {Object.entries(productLabels).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
+            {productsLoading
+              ? <option value="" disabled>Loading products…</option>
+              : products.length === 0
+              ? <option value="" disabled>No products found</option>
+              : products.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.sku ? ` — ${p.sku}` : ""}
+                  </option>
+                ))
+            }
           </select>
           {onViewDPP && (
-            <button onClick={onViewDPP} data-testid="button-view-dpp" className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0">
+            <button onClick={() => onViewDPP(selectedProduct)} data-testid="button-view-dpp" className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0">
               <FileCheck className="w-4 h-4" /> View DPP
             </button>
           )}

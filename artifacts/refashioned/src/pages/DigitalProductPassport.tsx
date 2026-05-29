@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearch } from "wouter";
+import { supabase } from "../lib/supabaseClient";
 import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
@@ -6,8 +8,31 @@ import {
 } from "lucide-react";
 
 export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
+  const search = useSearch();
+  const productId = new URLSearchParams(search).get("productId");
   const [activeStage, setActiveStage] = useState(0);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  const [productName, setProductName] = useState("Essential Cotton Tee");
+  const [productSku, setProductSku] = useState<string | null>(null);
+  const [productLoading, setProductLoading] = useState(true);
+
+  useEffect(() => {
+    if (!supabase) { setProductLoading(false); return; }
+    const client = supabase;
+    async function fetchProduct() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q = (client.from("products").select("name, sku") as any);
+      if (productId) q = q.eq("id", productId);
+      else q = q.order("name");
+      const { data } = await q.limit(1).maybeSingle();
+      if (data) {
+        setProductName(data.name ?? "Unknown Product");
+        setProductSku(data.sku ?? null);
+      }
+      setProductLoading(false);
+    }
+    fetchProduct();
+  }, [productId]);
 
   const stages = [
     {
@@ -126,8 +151,12 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
           <div className="inline-flex items-center gap-1.5 text-xs font-medium bg-[#6AE096]/20 text-[#6AE096] border border-[#6AE096]/30 rounded-full px-3 py-1 mb-4">
             <FileCheck className="w-3.5 h-3.5" /> Product Journey
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold mb-2">Essential Cotton Tee</h1>
-          <p className="text-sm text-white/60 mb-1">By EcoThread</p>
+          <h1 className="text-3xl sm:text-4xl font-bold mb-2">
+            {productLoading ? <span className="opacity-50">Loading…</span> : productName}
+          </h1>
+          <p className="text-sm text-white/60 mb-1">
+            {productSku ? `SKU: ${productSku}` : "By EcoThread"}
+          </p>
           <p className="text-sm text-white/70 max-w-xl mt-3 leading-relaxed">
             A testament to sustainable craft, this tee is designed for timeless style and minimal impact. Discover its journey from seed to shirt.
           </p>
