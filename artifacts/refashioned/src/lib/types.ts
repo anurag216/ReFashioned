@@ -31,9 +31,10 @@ export interface Product {
   organization_id: string;
   name: string;
   sku: string | null;
+  season: string | null;
   category: string | null;
   description: string | null;
-  status: "active" | "archived" | "draft";
+  status: "draft" | "in_review" | "published";
   image_url: string | null;
   material_composition: Record<string, number> | null;  // e.g. { cotton: 80, polyester: 20 }
   country_of_origin: string | null;
@@ -41,6 +42,18 @@ export interface Product {
   created_at: string;
   updated_at: string;
 }
+
+export interface OrganizationMember {
+  id: string;
+  organization_id: string;
+  user_id: string;              // references auth.users.id
+  role: "admin" | "manager" | "viewer";
+  joined_at: string;
+  created_at: string;
+}
+
+export type OrganizationMemberInsert = Omit<OrganizationMember, "id" | "created_at">;
+export type OrganizationMemberUpdate = Partial<OrganizationMemberInsert>;
 
 export interface Supplier {
   id: string;
@@ -123,40 +136,52 @@ export type Database = {
   public: {
     Tables: {
       organizations: {
-        Row:    Organization;
-        Insert: OrganizationInsert;
-        Update: OrganizationUpdate;
+        Row:           Organization;
+        Insert:        OrganizationInsert;
+        Update:        OrganizationUpdate;
+        Relationships: [];
       };
       profiles: {
-        Row:    Profile;
-        Insert: ProfileInsert;
-        Update: ProfileUpdate;
+        Row:           Profile;
+        Insert:        ProfileInsert;
+        Update:        ProfileUpdate;
+        Relationships: [];
       };
       products: {
-        Row:    Product;
-        Insert: ProductInsert;
-        Update: ProductUpdate;
+        Row:           Product;
+        Insert:        ProductInsert;
+        Update:        ProductUpdate;
+        Relationships: [];
       };
       suppliers: {
-        Row:    Supplier;
-        Insert: SupplierInsert;
-        Update: SupplierUpdate;
+        Row:           Supplier;
+        Insert:        SupplierInsert;
+        Update:        SupplierUpdate;
+        Relationships: [];
       };
       lifecycle_stages: {
-        Row:    LifecycleStage;
-        Insert: LifecycleStageInsert;
-        Update: LifecycleStageUpdate;
+        Row:           LifecycleStage;
+        Insert:        LifecycleStageInsert;
+        Update:        LifecycleStageUpdate;
+        Relationships: [];
       };
       digital_product_passports: {
-        Row:    DigitalProductPassport;
-        Insert: DigitalProductPassportInsert;
-        Update: DigitalProductPassportUpdate;
+        Row:           DigitalProductPassport;
+        Insert:        DigitalProductPassportInsert;
+        Update:        DigitalProductPassportUpdate;
+        Relationships: [];
+      };
+      organization_members: {
+        Row:           OrganizationMember;
+        Insert:        OrganizationMemberInsert;
+        Update:        OrganizationMemberUpdate;
+        Relationships: [];
       };
     };
     Views:     Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
-      product_status:   "active" | "archived" | "draft";
+      product_status:   "draft" | "in_review" | "published";
       supplier_status:  "active" | "inactive" | "under_review";
       dpp_status:       "draft" | "published" | "archived";
       compliance_status: "compliant" | "non_compliant" | "pending";

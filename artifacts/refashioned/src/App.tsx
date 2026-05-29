@@ -3,7 +3,7 @@ import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
   Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
-  Users, Calculator, Globe, LogOut,
+  Users, Calculator, Globe, LogOut, Package,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
@@ -19,6 +19,7 @@ const CSRDReport = lazy(() => import("./pages/CSRDReport").then(m => ({ default:
 const CarbonCalculator = lazy(() => import("./pages/CarbonCalculator").then(m => ({ default: m.CarbonCalculator })));
 const RegulatoryRadar = lazy(() => import("./pages/RegulatoryRadar").then(m => ({ default: m.RegulatoryRadar })));
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.NotFound })));
+const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ default: m.ProductCatalog })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -49,6 +50,7 @@ function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
 
 const navItems = [
   { path: "/dashboard",    label: "Dashboard",                icon: LayoutDashboard },
+  { path: "/products",     label: "Products",                 icon: Package         },
   { path: "/traceability", label: "Lifecycle Traceability",   icon: GitBranch       },
   { path: "/profile",      label: "Brand Profile",            icon: Building2       },
   { path: "/passport",     label: "Digital Product Passport", icon: FileCheck       },
@@ -179,6 +181,9 @@ export default function App() {
               </Route>
               <Route path="/dashboard">
                 <Dashboard onViewMetrics={() => setLocation("/traceability")} />
+              </Route>
+              <Route path="/products">
+                <ProductCatalog />
               </Route>
               <Route path="/traceability">
                 <Traceability onViewDPP={() => setLocation("/passport")} />
