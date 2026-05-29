@@ -18,6 +18,7 @@ const SettingsPage = lazy(() => import("./pages/Settings").then(m => ({ default:
 const CSRDReport = lazy(() => import("./pages/CSRDReport").then(m => ({ default: m.CSRDReport })));
 const CarbonCalculator = lazy(() => import("./pages/CarbonCalculator").then(m => ({ default: m.CarbonCalculator })));
 const RegulatoryRadar = lazy(() => import("./pages/RegulatoryRadar").then(m => ({ default: m.RegulatoryRadar })));
+const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.NotFound })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -199,6 +200,9 @@ export default function App() {
               </Route>
               <Route path="/settings">
                 <SettingsPage />
+              </Route>
+              <Route>
+                <NotFound />
               </Route>
             </Switch>
           </Suspense>
