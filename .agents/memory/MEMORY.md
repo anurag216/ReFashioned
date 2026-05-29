@@ -1,1 +1,2 @@
 - [RE:Fashioned routing conventions](refashioned-routing.md) — URL map, DPP full-screen pattern, lazy-import architecture, wouter gotchas
+- [RE:Fashioned data layer](refashioned-data-layer.md) — types.ts structure, Database generic, typed Supabase client, table → interface mapping
