@@ -72,7 +72,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     async function fetchLiveStages() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const baseQ = (client.from("lifecycle_stages").select(
-        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status"
+        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status, suppliers(name)"
       ) as any);
       const q = productId ? baseQ.eq("product_id", productId) : baseQ;
       const { data } = await q.order("stage_order", { ascending: true });
@@ -88,7 +88,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
           icon:     iconMeta.icon,
           title:    (r.stage_name  as string) ?? "—",
           location: (r.location    as string) ?? "—",
-          supplier: "—",
+          supplier: (r.suppliers as any)?.name ?? "—",
           desc:     (r.description as string) ?? (r.subtitle as string) ?? "",
           cert:     (r.certification as string) ?? "",
           certColor,

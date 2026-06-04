@@ -44,7 +44,8 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [addForm, setAddForm] = useState({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "" });
+  const [orgSuppliers, setOrgSuppliers] = useState<{ id: string; name: string }[]>([]);
+  const [addForm, setAddForm] = useState({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -61,6 +62,31 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         if (list.length > 0) setSelectedProduct(list[0].id);
         setProductsLoading(false);
       });
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    async function fetchOrgSuppliers() {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) return;
+      const { data: member } = await client
+        .from("organization_members")
+        .select("organization_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orgId = (member as any)?.organization_id as string | undefined;
+      if (!orgId) return;
+      const { data } = await client
+        .from("suppliers")
+        .select("id, name")
+        .eq("organization_id", orgId)
+        .order("name");
+      setOrgSuppliers((data ?? []) as { id: string; name: string }[]);
+    }
+    fetchOrgSuppliers();
   }, []);
 
   useEffect(() => {
@@ -172,11 +198,12 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         stage_order:     addForm.stage_order !== "" ? Number(addForm.stage_order) : 0,
         co2_impact_kg:   addForm.co2_impact_kg !== "" ? Number(addForm.co2_impact_kg) : null,
         water_usage_l:   addForm.water_usage_l !== "" ? Number(addForm.water_usage_l) : null,
+        supplier_id:     addForm.supplier_id || null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
     setShowAddModal(false);
-    setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "" });
+    setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
     setRefreshKey(k => k + 1);
     setSaving(false);
   }
@@ -373,6 +400,19 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
                   onChange={e => setAddForm(f => ({ ...f, subtitle: e.target.value }))}
                   placeholder="e.g. Maharashtra, India"
                   className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Supplier</label>
+                <select
+                  value={addForm.supplier_id}
+                  onChange={e => setAddForm(f => ({ ...f, supplier_id: e.target.value }))}
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
+                >
+                  <option value="">— No supplier —</option>
+                  {orgSuppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
