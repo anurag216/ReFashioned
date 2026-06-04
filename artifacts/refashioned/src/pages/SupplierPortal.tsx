@@ -13,6 +13,11 @@ export function SupplierPortal() {
   const [inviteForm, setInviteForm] = useState({ company: "", email: "", tier: "1", message: "" });
   const [inviteSent, setInviteSent] = useState(false);
   const [selectedCerts, setSelectedCerts] = useState<string[]>(["GOTS", "Fair Trade"]);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", location: "", tier: "1", status: "active" as "active" | "inactive" | "under_review" });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   type SupplierStatus = "active" | "needs-action" | "pending" | "invited" | "not-invited";
 
@@ -78,7 +83,7 @@ export function SupplierPortal() {
 
     fetchSuppliers();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const statusConfig: Record<SupplierStatus, { label: string; color: string; bg: string; border: string; dot: string }> = {
     "active":       { label: "Active",        color: "text-green-700",  bg: "bg-green-50",  border: "border-green-200",  dot: "bg-green-500"  },
@@ -125,6 +130,47 @@ export function SupplierPortal() {
 
   const certOptions = ["GOTS", "Fair Trade", "OEKO-TEX", "BlueSign", "ZDHC", "SA8000", "REACH", "FSC", "ISO 14001"];
 
+  async function handleAddSupplier() {
+    if (!addForm.name.trim()) { setSaveError("Supplier name is required."); return; }
+    setSaving(true); setSaveError(null);
+    const client = supabase;
+    if (!client) { setSaveError("Supabase not configured."); setSaving(false); return; }
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) { setSaveError("Not authenticated."); setSaving(false); return; }
+    const { data: member, error: memberError } = await client
+      .from("organization_members")
+      .select("organization_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (memberError) {
+      setSaveError(`Org lookup failed: ${memberError.message} (${memberError.code})`);
+      setSaving(false); return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(member as any)?.organization_id) {
+      setSaveError(`No org found for profile_id = ${user.id}`);
+      setSaving(false); return;
+    }
+    const { error: insertError } = await client
+      .from("suppliers")
+      .insert({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        organization_id: (member as any).organization_id as string,
+        name:     addForm.name.trim(),
+        tier:     Number(addForm.tier) as 1 | 2 | 3,
+        status:   addForm.status,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        location: addForm.location.trim() || null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+    if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
+    setShowAddModal(false);
+    setAddForm({ name: "", location: "", tier: "1", status: "active" });
+    setRefreshKey(k => k + 1);
+    setSaving(false);
+  }
+
   const handleSendInvite = () => {
     setInviteSent(true);
     setTimeout(() => { setShowInviteModal(false); setInviteSent(false); setInviteForm({ company: "", email: "", tier: "1", message: "" }); }, 1800);
@@ -139,13 +185,21 @@ export function SupplierPortal() {
           <h1 className="text-2xl font-bold text-foreground">Supplier Portal</h1>
           <p className="text-sm text-muted-foreground mt-1">Onboard suppliers, track data submissions, and manage certification uploads</p>
         </div>
-        <button
-          data-testid="button-invite-supplier"
-          onClick={() => setShowInviteModal(true)}
-          className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Invite Supplier
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => { setShowAddModal(true); setSaveError(null); }}
+            className="flex items-center gap-2 bg-[#6AE096] hover:bg-[#5acc85] text-[#0d2b1e] px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Add Supplier
+          </button>
+          <button
+            data-testid="button-invite-supplier"
+            onClick={() => setShowInviteModal(true)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
+          >
+            <Send className="w-4 h-4" /> Invite
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -344,6 +398,90 @@ export function SupplierPortal() {
           ))}
         </div>
       </div>
+
+      {/* Add Supplier modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gray-50/50">
+              <div>
+                <h3 className="font-semibold text-foreground">Add Supplier</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Create a new supplier record in your organization</p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {saveError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-800">{saveError}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">Supplier Name <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={addForm.name}
+                  onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Sunrise Ginning Co."
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">Location</label>
+                <input
+                  type="text"
+                  value={addForm.location}
+                  onChange={e => setAddForm(f => ({ ...f, location: e.target.value }))}
+                  placeholder="e.g. Gujarat, India"
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">Supply Chain Tier</label>
+                  <select
+                    value={addForm.tier}
+                    onChange={e => setAddForm(f => ({ ...f, tier: e.target.value }))}
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
+                  >
+                    <option value="1">Tier 1 — Direct</option>
+                    <option value="2">Tier 2 — Secondary</option>
+                    <option value="3">Tier 3 — Raw material</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">Status</label>
+                  <select
+                    value={addForm.status}
+                    onChange={e => setAddForm(f => ({ ...f, status: e.target.value as "active" | "inactive" | "under_review" }))}
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="under_review">Under Review</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-border bg-gray-50/50 flex items-center justify-end gap-3">
+              <button onClick={() => setShowAddModal(false)} disabled={saving}
+                className="px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleAddSupplier} disabled={saving || !addForm.name.trim()}
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm disabled:opacity-50">
+                {saving
+                  ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
+                  : "Save Supplier"
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Invite modal */}
       {showInviteModal && (
