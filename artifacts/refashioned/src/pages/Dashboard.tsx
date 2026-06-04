@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Download, Leaf, RefreshCw, Droplets, ChevronRight } from "lucide-react";
+import { Download, Leaf, RefreshCw, Droplets, ChevronRight, Package, Building2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
 import { supabase } from "../lib/supabaseClient";
 
@@ -10,18 +10,41 @@ export function Dashboard({ onViewMetrics }: { onViewMetrics?: () => void }) {
   const [dbLoading, setDbLoading] = useState(true);
   const [liveSuppliers, setLiveSuppliers] = useState<{ status: string; data_completeness: number }[]>([]);
   const [liveStages, setLiveStages] = useState<{ stage_name: string; co2_impact_kg: number; water_usage_l: number }[]>([]);
+  const [totalProducts, setTotalProducts] = useState<number | null>(null);
+  const [totalSuppliers, setTotalSuppliers] = useState<number | null>(null);
+  const [totalCO2, setTotalCO2] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function fetchDashboard() {
       if (!supabase) { setDbLoading(false); return; }
-      const [sRes, stRes] = await Promise.all([
-        supabase.from("suppliers").select("status, data_completeness"),
-        supabase.from("lifecycle_stages").select("stage_name, co2_impact_kg, water_usage_l"),
+      const client = supabase;
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) { setDbLoading(false); return; }
+      const { data: member } = await client
+        .from("organization_members")
+        .select("organization_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orgId = (member as any)?.organization_id as string | undefined;
+      if (!orgId || cancelled) { setDbLoading(false); return; }
+      const [sRes, stRes, pRes] = await Promise.all([
+        client.from("suppliers").select("status, data_completeness").eq("organization_id", orgId),
+        client.from("lifecycle_stages").select("stage_name, co2_impact_kg, water_usage_l").eq("organization_id", orgId),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (client.from("products") as any).select("id", { count: "exact", head: true }).eq("organization_id", orgId),
       ]);
       if (cancelled) return;
       if (!sRes.error)  setLiveSuppliers(sRes.data  ?? []);
-      if (!stRes.error) setLiveStages(stRes.data ?? []);
+      if (!stRes.error) {
+        const stages = (stRes.data ?? []) as { stage_name: string; co2_impact_kg: number; water_usage_l: number }[];
+        setLiveStages(stages);
+        setTotalCO2(stages.reduce((sum, r) => sum + (r.co2_impact_kg ?? 0), 0));
+      }
+      setTotalProducts(pRes.count ?? 0);
+      setTotalSuppliers(sRes.data?.length ?? 0);
       setDbLoading(false);
     }
     fetchDashboard();
@@ -170,6 +193,26 @@ export function Dashboard({ onViewMetrics }: { onViewMetrics?: () => void }) {
             <Download className="w-4 h-4" /> Export
           </button>
         </div>
+      </div>
+
+      {/* Summary count cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Total Products",    value: dbLoading ? "…" : String(totalProducts ?? 0),  icon: Package,   color: "text-primary",     bg: "bg-primary/10"  },
+          { label: "Total Suppliers",   value: dbLoading ? "…" : String(totalSuppliers ?? 0), icon: Building2, color: "text-blue-600",    bg: "bg-blue-50"     },
+          { label: "Stages Tracked",    value: dbLoading ? "…" : String(liveStages.length),   icon: RefreshCw, color: "text-purple-600",  bg: "bg-purple-50"   },
+          { label: "Total CO₂ (kg)",    value: dbLoading ? "…" : (totalCO2 ?? 0).toFixed(1),  icon: Leaf,      color: "text-green-600",   bg: "bg-green-50"    },
+        ].map((s, i) => (
+          <div key={i} className="bg-card rounded-lg p-4 shadow-sm border border-card-border flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-lg ${s.bg} flex items-center justify-center shrink-0`}>
+              <s.icon className={`w-4 h-4 ${s.color}`} />
+            </div>
+            <div>
+              <p className={`text-xl font-bold ${dbLoading ? "text-muted-foreground" : "text-foreground"}`}>{s.value}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* KPI cards — spinner overlaid while loading */}
