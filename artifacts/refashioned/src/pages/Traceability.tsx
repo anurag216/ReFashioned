@@ -1,7 +1,7 @@
 import { useState, useEffect, type ElementType } from "react";
 import {
   AlertTriangle, Leaf, RefreshCw, Scissors, Droplets, Shirt,
-  Package, FileCheck, Download, CheckCircle2, XCircle, Zap,
+  Package, FileCheck, Download, CheckCircle2, XCircle, Zap, Plus,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -42,6 +42,11 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   const [rows, setRows] = useState<TraceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "" });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) { setProductsLoading(false); return; }
@@ -132,7 +137,49 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
 
     fetchStages();
     return () => { cancelled = true; };
-  }, [selectedProduct]);
+  }, [selectedProduct, refreshKey]);
+
+  async function handleAddStage() {
+    if (!addForm.stage_name.trim()) { setSaveError("Stage name is required."); return; }
+    setSaving(true); setSaveError(null);
+    const client = supabase;
+    if (!client) { setSaveError("Supabase not configured."); setSaving(false); return; }
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) { setSaveError("Not authenticated."); setSaving(false); return; }
+    const { data: member, error: memberError } = await client
+      .from("organization_members")
+      .select("organization_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (memberError) {
+      setSaveError(`Org lookup failed: ${memberError.message} (${memberError.code})`);
+      setSaving(false); return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(member as any)?.organization_id) {
+      setSaveError(`No org found for profile_id = ${user.id}`);
+      setSaving(false); return;
+    }
+    const { error: insertError } = await client
+      .from("lifecycle_stages")
+      .insert({
+        product_id:      selectedProduct,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        organization_id: (member as any).organization_id as string,
+        stage_name:      addForm.stage_name.trim(),
+        subtitle:        addForm.subtitle.trim() || null,
+        stage_order:     addForm.stage_order !== "" ? Number(addForm.stage_order) : 0,
+        co2_impact_kg:   addForm.co2_impact_kg !== "" ? Number(addForm.co2_impact_kg) : null,
+        water_usage_l:   addForm.water_usage_l !== "" ? Number(addForm.water_usage_l) : null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+    if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
+    setShowAddModal(false);
+    setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "" });
+    setRefreshKey(k => k + 1);
+    setSaving(false);
+  }
 
   const hasFlagged = rows.some(r => r.flagged);
 
@@ -199,9 +246,19 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
       <div className="bg-card rounded-lg shadow-sm border border-card-border overflow-hidden">
         <div className="px-6 py-4 border-b border-border bg-gray-50/50 flex items-center justify-between">
           <h2 className="font-semibold text-foreground">Product Lifecycle Stages</h2>
-          <span className="text-xs text-muted-foreground">
-            {loading ? "Loading…" : `${rows.length} stages tracked`}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {loading ? "Loading…" : `${rows.length} stages tracked`}
+            </span>
+            {selectedProduct && (
+              <button
+                onClick={() => { setShowAddModal(true); setSaveError(null); }}
+                className="flex items-center gap-1.5 bg-[#6AE096] hover:bg-[#5acc85] text-[#0d2b1e] px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Stage
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Loading spinner */}
@@ -288,6 +345,75 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
           </div>
         )}
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-border bg-gray-50/50">
+              <h3 className="font-semibold text-foreground">Add Lifecycle Stage</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Attach a new supply chain stage to the selected product</p>
+            </div>
+            <div className="p-6 space-y-4">
+              {saveError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                  <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-800">{saveError}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Stage Name <span className="text-red-500">*</span></label>
+                <input type="text" value={addForm.stage_name}
+                  onChange={e => setAddForm(f => ({ ...f, stage_name: e.target.value }))}
+                  placeholder="e.g. Raw Material Sourcing"
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Subtitle / Location</label>
+                <input type="text" value={addForm.subtitle}
+                  onChange={e => setAddForm(f => ({ ...f, subtitle: e.target.value }))}
+                  placeholder="e.g. Maharashtra, India"
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Order</label>
+                  <input type="number" min="0" value={addForm.stage_order}
+                    onChange={e => setAddForm(f => ({ ...f, stage_order: e.target.value }))}
+                    placeholder="1"
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">CO₂ (kg)</label>
+                  <input type="number" min="0" step="0.1" value={addForm.co2_impact_kg}
+                    onChange={e => setAddForm(f => ({ ...f, co2_impact_kg: e.target.value }))}
+                    placeholder="42.3"
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Water (L)</label>
+                  <input type="number" min="0" value={addForm.water_usage_l}
+                    onChange={e => setAddForm(f => ({ ...f, water_usage_l: e.target.value }))}
+                    placeholder="1800"
+                    className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-border bg-gray-50/50 flex items-center justify-end gap-3">
+              <button onClick={() => setShowAddModal(false)} disabled={saving}
+                className="px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleAddStage} disabled={saving || !addForm.stage_name.trim()}
+                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm disabled:opacity-50">
+                {saving
+                  ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
+                  : "Save Stage"
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

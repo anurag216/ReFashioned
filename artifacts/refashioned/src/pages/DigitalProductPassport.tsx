@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ElementType } from "react";
 import { useSearch } from "wouter";
 import { supabase } from "../lib/supabaseClient";
 import {
@@ -6,6 +6,34 @@ import {
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
   CheckCircle2, ThumbsUp, ThumbsDown, AlertTriangle, Droplets,
 } from "lucide-react";
+
+interface DppStageRow {
+  label: string;
+  icon: ElementType;
+  title: string;
+  location: string;
+  supplier: string;
+  desc: string;
+  cert: string;
+  certColor: string;
+  co2: string;
+  water: string;
+}
+
+const DPP_STAGE_ICON_MAP: Record<string, { icon: ElementType }> = {
+  "Raw Material Sourcing":    { icon: Leaf      },
+  "Processing & Spinning":    { icon: RefreshCw },
+  "Scouring & Processing":    { icon: RefreshCw },
+  "Fabric Production":        { icon: Package   },
+  "Spinning & Knitting":      { icon: Package   },
+  "Dyeing & Finishing":       { icon: Droplets  },
+  "Garment Manufacturing":    { icon: Shirt     },
+  "Garment Assembly":         { icon: Shirt     },
+  "Shipping & Logistics":     { icon: Package   },
+  "Care & Use":               { icon: Shirt     },
+  "Circularity & Recycling":  { icon: Recycle   },
+};
+const DPP_DEFAULT_ICON = { icon: Package };
 
 export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
   const search = useSearch();
@@ -32,6 +60,46 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       setProductLoading(false);
     }
     fetchProduct();
+  }, [productId]);
+
+  const [liveStages, setLiveStages] = useState<DppStageRow[]>([]);
+  const [stagesLoading, setStagesLoading] = useState(true);
+
+  useEffect(() => {
+    setActiveStage(0);
+    if (!supabase) { setStagesLoading(false); return; }
+    const client = supabase;
+    async function fetchLiveStages() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const baseQ = (client.from("lifecycle_stages").select(
+        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status"
+      ) as any);
+      const q = productId ? baseQ.eq("product_id", productId) : baseQ;
+      const { data } = await q.order("stage_order", { ascending: true });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapped: DppStageRow[] = (data ?? []).map((r: any) => {
+        const iconMeta = DPP_STAGE_ICON_MAP[r.stage_name as string] ?? DPP_DEFAULT_ICON;
+        const certColor =
+          r.certification_status === "verified" ? "bg-green-100 text-green-700 border-green-200" :
+          r.certification_status === "expired"  ? "bg-red-100 text-red-700 border-red-200" :
+                                                  "bg-amber-100 text-amber-700 border-amber-200";
+        return {
+          label:    ((r.stage_name as string) ?? "Stage").split(/\s+/)[0],
+          icon:     iconMeta.icon,
+          title:    (r.stage_name  as string) ?? "—",
+          location: (r.location    as string) ?? "—",
+          supplier: "—",
+          desc:     (r.description as string) ?? (r.subtitle as string) ?? "",
+          cert:     (r.certification as string) ?? "",
+          certColor,
+          co2:   r.co2_impact_kg != null ? `${r.co2_impact_kg} kg CO₂e` : "—",
+          water: r.water_usage_l  != null ? `${Number(r.water_usage_l).toLocaleString()} L` : "—",
+        };
+      });
+      setLiveStages(mapped);
+      setStagesLoading(false);
+    }
+    fetchLiveStages();
   }, [productId]);
 
   const stages = [
@@ -109,6 +177,8 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     { label: "Water Consumption", unit: "L", thisProd: 2965, industryAvg: 33000, less: "91% Less Water", barColor: "bg-blue-400", avgColor: "bg-slate-300" },
     { label: "Circularity Score", unit: "/100", thisProd: 85, industryAvg: 38, less: "85/100 Score", barColor: "bg-purple-400", avgColor: "bg-slate-300", higherIsBetter: true },
   ];
+
+  const displayStages = !stagesLoading && liveStages.length > 0 ? liveStages : stages;
 
   return (
     <div className="min-h-full bg-[#F8FAFC]">
@@ -194,7 +264,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
           {/* Stage stepper */}
           <div className="px-6 py-5 border-b border-border overflow-x-auto">
             <div className="flex items-start gap-0 min-w-max">
-              {stages.map((s, i) => (
+              {displayStages.map((s, i) => (
                 <div key={i} className="flex items-center">
                   <button
                     data-testid={`button-stage-${i}`}
@@ -206,7 +276,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
                     </div>
                     <span className={`text-xs font-medium whitespace-nowrap ${activeStage === i ? "text-primary" : "text-muted-foreground"}`}>{s.label}</span>
                   </button>
-                  {i < stages.length - 1 && (
+                  {i < displayStages.length - 1 && (
                     <div className={`h-0.5 w-8 transition-colors ${i < activeStage ? "bg-primary" : "bg-border"}`} />
                   )}
                 </div>
@@ -220,38 +290,38 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
               <div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    {(() => { const Icon = stages[activeStage].icon; return <Icon className="w-5 h-5 text-primary" />; })()}
+                    {(() => { const Icon = displayStages[activeStage].icon; return <Icon className="w-5 h-5 text-primary" />; })()}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground">{stages[activeStage].title}</h3>
+                    <h3 className="font-semibold text-foreground">{displayStages[activeStage].title}</h3>
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                      <MapPin className="w-3 h-3" /> {stages[activeStage].location}
+                      <MapPin className="w-3 h-3" /> {displayStages[activeStage].location}
                     </div>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">{stages[activeStage].desc}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{displayStages[activeStage].desc}</p>
                 <div className="mt-4">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${stages[activeStage].certColor}`}>
-                    <ShieldCheck className="w-3 h-3" /> {stages[activeStage].cert}
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${displayStages[activeStage].certColor}`}>
+                    <ShieldCheck className="w-3 h-3" /> {displayStages[activeStage].cert}
                   </span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 content-start">
                 <div className="bg-muted/40 rounded-lg p-4 border border-border">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Supplier</p>
-                  <p className="text-sm font-medium text-foreground">{stages[activeStage].supplier}</p>
+                  <p className="text-sm font-medium text-foreground">{displayStages[activeStage].supplier}</p>
                 </div>
                 <div className="bg-muted/40 rounded-lg p-4 border border-border">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Location</p>
-                  <p className="text-sm font-medium text-foreground">{stages[activeStage].location}</p>
+                  <p className="text-sm font-medium text-foreground">{displayStages[activeStage].location}</p>
                 </div>
                 <div className="bg-green-50 rounded-lg p-4 border border-green-100">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">CO₂ Impact</p>
-                  <p className="text-sm font-semibold text-green-700">{stages[activeStage].co2}</p>
+                  <p className="text-sm font-semibold text-green-700">{displayStages[activeStage].co2}</p>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
                   <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Water Used</p>
-                  <p className="text-sm font-semibold text-blue-700">{stages[activeStage].water}</p>
+                  <p className="text-sm font-semibold text-blue-700">{displayStages[activeStage].water}</p>
                 </div>
               </div>
             </div>
@@ -265,10 +335,10 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
               >
                 <ArrowLeft className="w-4 h-4" /> Previous
               </button>
-              <span className="text-xs text-muted-foreground">{activeStage + 1} of {stages.length}</span>
+              <span className="text-xs text-muted-foreground">{activeStage + 1} of {displayStages.length}</span>
               <button
-                onClick={() => setActiveStage(Math.min(stages.length - 1, activeStage + 1))}
-                disabled={activeStage === stages.length - 1}
+                onClick={() => setActiveStage(Math.min(displayStages.length - 1, activeStage + 1))}
+                disabled={activeStage === displayStages.length - 1}
                 className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-colors"
               >
                 Next <ArrowLeft className="w-4 h-4 rotate-180" />

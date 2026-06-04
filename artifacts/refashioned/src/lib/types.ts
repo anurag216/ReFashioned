@@ -74,6 +74,7 @@ export interface LifecycleStage {
   supplier_id: string | null;
   stage_name: string;          // e.g. "sourcing" | "spinning" | "logistics" | "use" | "end_of_life"
   stage_order: number;
+  subtitle: string | null;
   location: string | null;
   description: string | null;
   co2_impact_kg: number | null;
