@@ -1,10 +1,12 @@
 import { useState, useEffect, type ElementType } from "react";
 import { useSearch } from "wouter";
 import { supabase } from "../lib/supabaseClient";
+import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
   CheckCircle2, ThumbsUp, ThumbsDown, AlertTriangle, Droplets,
+  X, Copy, Check,
 } from "lucide-react";
 
 interface DppStageRow {
@@ -43,19 +45,23 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
   const [productName, setProductName] = useState("Essential Cotton Tee");
   const [productSku, setProductSku] = useState<string | null>(null);
   const [productLoading, setProductLoading] = useState(true);
+  const [fetchedProductId, setFetchedProductId] = useState<string | null>(null);
+  const [showQR, setShowQR] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!supabase) { setProductLoading(false); return; }
     const client = supabase;
     async function fetchProduct() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (client.from("products").select("name, sku") as any);
+      let q = (client.from("products").select("id, name, sku") as any);
       if (productId) q = q.eq("id", productId);
       else q = q.order("name");
       const { data } = await q.limit(1).maybeSingle();
       if (data) {
         setProductName(data.name ?? "Unknown Product");
         setProductSku(data.sku ?? null);
+        setFetchedProductId(data.id ?? null);
       }
       setProductLoading(false);
     }
@@ -207,7 +213,9 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
             </div>
             <button
               data-testid="button-dpp-share"
-              className="flex items-center gap-1.5 bg-primary text-white hover:bg-primary/90 px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
+              onClick={() => setShowQR(true)}
+              disabled={productLoading || (!productId && !fetchedProductId)}
+              className="flex items-center gap-1.5 bg-primary text-white hover:bg-primary/90 px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Share className="w-3.5 h-3.5" /> Share
             </button>
@@ -455,6 +463,81 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
           © 2023 EcoThread &nbsp;|&nbsp; Impact verified by RE:Fashioned &nbsp;|&nbsp; The Future of Fashion is Transparent
         </div>
       </div>
+
+      {/* QR Code / Share modal */}
+      {showQR && (() => {
+        const resolvedId = productId ?? fetchedProductId ?? "";
+        const publicUrl = resolvedId
+          ? `${window.location.origin}/p/${resolvedId}`
+          : window.location.href;
+        function handleCopy() {
+          navigator.clipboard.writeText(publicUrl).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          });
+        }
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setShowQR(false)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col items-center gap-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="w-full flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Share this Passport</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Anyone with the link can view this product</p>
+                </div>
+                <button
+                  onClick={() => setShowQR(false)}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* QR code */}
+              <div className="bg-white rounded-xl border-2 border-border p-4 shadow-inner">
+                <QRCodeSVG
+                  value={publicUrl}
+                  size={180}
+                  bgColor="#ffffff"
+                  fgColor="#12382B"
+                  level="M"
+                  includeMargin={false}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center -mt-1">
+                Scan with any camera app to open the public passport
+              </p>
+
+              {/* URL + copy */}
+              <div className="w-full flex items-center gap-2">
+                <div className="flex-1 min-w-0 bg-muted/50 border border-border rounded-md px-3 py-2">
+                  <p className="text-xs text-muted-foreground truncate font-mono">{publicUrl}</p>
+                </div>
+                <button
+                  onClick={handleCopy}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium border transition-all ${copied ? "bg-green-500 text-white border-green-500" : "bg-white text-foreground border-border hover:border-primary/40 hover:text-primary"}`}
+                >
+                  {copied ? <><Check className="w-3.5 h-3.5" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowQR(false)}
+                className="w-full py-2 rounded-md text-sm font-medium bg-primary text-white hover:bg-primary/90 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -20,6 +20,7 @@ const CarbonCalculator = lazy(() => import("./pages/CarbonCalculator").then(m =>
 const RegulatoryRadar = lazy(() => import("./pages/RegulatoryRadar").then(m => ({ default: m.RegulatoryRadar })));
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.NotFound })));
 const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ default: m.ProductCatalog })));
+const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ default: m.PublicPassport })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -77,6 +78,16 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Public DPP route — accessible without authentication
+  if (location.startsWith("/p/")) {
+    const publicProductId = location.slice(3);
+    return (
+      <Suspense fallback={<DarkSpinner fullScreen />}>
+        <PublicPassport productId={publicProductId} />
+      </Suspense>
+    );
+  }
 
   if (authLoading) {
     return <DarkSpinner fullScreen />;
