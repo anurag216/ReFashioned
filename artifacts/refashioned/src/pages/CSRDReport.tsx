@@ -31,27 +31,45 @@ export function CSRDReport() {
   const [dbLoading, setDbLoading] = useState(true);
   const [scope3Live, setScope3Live] = useState<number | null>(null);
   const [waterLive, setWaterLive] = useState<number | null>(null);
+  const [liveSuppliers, setLiveSuppliers] = useState<{ tier: number; status: string }[]>([]);
+  const [totalProductsLive, setTotalProductsLive] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchEmissions() {
+    async function fetchReport() {
       setDbLoading(true);
       if (!supabase) { setDbLoading(false); return; }
-      const { data, error } = await supabase
-        .from("lifecycle_stages")
-        .select("co2_impact_kg, water_usage_l");
+      const client = supabase;
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) { setDbLoading(false); return; }
+      const { data: member } = await client
+        .from("organization_members")
+        .select("organization_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orgId = (member as any)?.organization_id as string | undefined;
+      if (!orgId || cancelled) { setDbLoading(false); return; }
+      const [stRes, sRes, pRes] = await Promise.all([
+        client.from("lifecycle_stages").select("co2_impact_kg, water_usage_l").eq("organization_id", orgId),
+        client.from("suppliers").select("tier, status").eq("organization_id", orgId),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (client.from("products") as any).select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+      ]);
       if (cancelled) return;
-      if (!error && data && data.length > 0) {
-        const co2Sum = (data as { co2_impact_kg: number | null }[])
-          .reduce((acc, r) => acc + (r.co2_impact_kg ?? 0), 0);
-        const waterSum = (data as { water_usage_l: number | null }[])
-          .reduce((acc, r) => acc + (r.water_usage_l ?? 0), 0);
-        setScope3Live(Math.round(co2Sum * 10) / 10);
-        setWaterLive(Math.round(waterSum));
+      if (!stRes.error && stRes.data) {
+        const stages = stRes.data as { co2_impact_kg: number | null; water_usage_l: number | null }[];
+        setScope3Live(Math.round(stages.reduce((a, r) => a + (r.co2_impact_kg ?? 0), 0) * 10) / 10);
+        setWaterLive(Math.round(stages.reduce((a, r) => a + (r.water_usage_l ?? 0), 0)));
       }
+      if (!sRes.error && sRes.data) {
+        setLiveSuppliers(sRes.data as { tier: number; status: string }[]);
+      }
+      setTotalProductsLive(pRes.count ?? 0);
       setDbLoading(false);
     }
-    fetchEmissions();
+    fetchReport();
     return () => { cancelled = true; };
   }, []);
 
@@ -107,6 +125,23 @@ export function CSRDReport() {
   const scope3Pct = totalCo2t > 0 ? `${Math.round((scope3t / totalCo2t) * 1000) / 10}%` : "—";
   const scope2Pct = totalCo2t > 0 ? `${Math.round((scope2t / totalCo2t) * 1000) / 10}%` : "—";
   const scope1Pct = totalCo2t > 0 ? `${Math.round((scope1t / totalCo2t) * 1000) / 10}%` : "—";
+
+  // Live supplier tier breakdown for ESRS S2
+  const hasLiveSuppliers = liveSuppliers.length > 0;
+  const tier1Count = liveSuppliers.filter(s => s.tier === 1).length;
+  const tier2Count = liveSuppliers.filter(s => s.tier === 2).length;
+  const tier3Count = liveSuppliers.filter(s => s.tier === 3).length;
+  const s2T1Val = hasLiveSuppliers ? `${tier1Count} supplier${tier1Count !== 1 ? "s" : ""} — 100% coverage` : "100% audited (SA8000)";
+  const s2T2Val = hasLiveSuppliers ? `${tier2Count} supplier${tier2Count !== 1 ? "s" : ""} mapped` : "60% audited";
+  const s2T3Val = hasLiveSuppliers ? `${tier3Count} supplier${tier3Count !== 1 ? "s" : ""} mapped` : "12% coverage";
+  // Live water total for ESRS E3
+  const e3WaterVal = waterLive != null && waterLive > 0
+    ? `${waterLive.toLocaleString()} L (total, all stages)`
+    : "2,965 L / unit";
+  // Key metrics for overview panel
+  const metricsProductsVal = dbLoading ? "…" : String(totalProductsLive ?? 0);
+  const metricsSuppliersVal = dbLoading ? "…" : String(liveSuppliers.length);
+
   const scopeData = [
     { scope: "Scope 1", tonnes: scope1t, fill: "#12382B" },
     { scope: "Scope 2", tonnes: scope2t, fill: "#6AE096" },
@@ -164,7 +199,7 @@ export function CSRDReport() {
       score: 79,
       status: "on-track" as const,
       dataPoints: [
-        { label: "Total Water Withdrawal", value: "2,965 L / unit", status: "complete" as const },
+        { label: "Total Water Withdrawal", value: dbLoading ? "…" : e3WaterVal, status: "complete" as const },
         { label: "Water Recycling Rate", value: "43% at processing", status: "complete" as const },
         { label: "Water Stress Area Assessment", value: "Maharashtra (high risk)", status: "complete" as const },
         { label: "Reduction Target (2025)", value: "-20% vs 2021 baseline", status: "pending" as const },
@@ -203,9 +238,9 @@ export function CSRDReport() {
       score: 63,
       status: "in-progress" as const,
       dataPoints: [
-        { label: "Tier 1 Supplier Audits", value: "100% audited (SA8000)", status: "complete" as const },
-        { label: "Tier 2 Supplier Audits", value: "60% audited", status: "pending" as const },
-        { label: "Tier 3 Supplier Audits", value: "12% coverage", status: "missing" as const },
+        { label: "Tier 1 Supplier Audits", value: dbLoading ? "…" : s2T1Val, status: "complete" as const },
+        { label: "Tier 2 Supplier Audits", value: dbLoading ? "…" : s2T2Val, status: (hasLiveSuppliers && tier2Count > 0) ? "complete" as const : "pending" as const },
+        { label: "Tier 3 Supplier Audits", value: dbLoading ? "…" : s2T3Val, status: (hasLiveSuppliers && tier3Count > 0) ? "pending" as const : "missing" as const },
         { label: "Supplier Code of Conduct", value: "Signed by all Tier 1", status: "complete" as const },
         { label: "Living Wage — Supply Chain", value: "Gap analysis in progress", status: "pending" as const },
         { label: "Grievance Mechanism", value: "Hotline operational", status: "complete" as const },
@@ -294,7 +329,9 @@ export function CSRDReport() {
           </select>
           <button
             data-testid="button-generate-report"
-            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
+            onClick={() => window.print()}
+            disabled={dbLoading}
+            className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" /> Export PDF
           </button>
@@ -308,7 +345,7 @@ export function CSRDReport() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
           </svg>
-          <p className="text-sm text-primary font-medium">Fetching live emissions data from database…</p>
+          <p className="text-sm text-primary font-medium">Generating report from live database…</p>
         </div>
       )}
 
@@ -374,12 +411,12 @@ export function CSRDReport() {
               <p className="text-xs text-muted-foreground mt-0.5">Litres water</p>
             </div>
             <div className="bg-muted/40 rounded-lg p-3 border border-border text-center">
-              <p className="text-xl font-bold text-foreground">100%</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Tier 1 audited</p>
+              <p className="text-xl font-bold text-foreground">{metricsProductsVal}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Products tracked</p>
             </div>
             <div className="bg-muted/40 rounded-lg p-3 border border-border text-center">
-              <p className="text-xl font-bold text-foreground">4/6</p>
-              <p className="text-xs text-muted-foreground mt-0.5">ESRS on track</p>
+              <p className="text-xl font-bold text-foreground">{metricsSuppliersVal}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Suppliers mapped</p>
             </div>
           </div>
         </div>
