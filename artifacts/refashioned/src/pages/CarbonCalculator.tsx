@@ -1,14 +1,119 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Download, FlameKindling, Target, TrendingUp, Globe,
   CheckCircle2, AlertTriangle, Sliders, Calculator,
+  Zap, Save, PackagePlus,
 } from "lucide-react";
+import { supabase } from "../lib/supabaseClient";
 import {
   BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ComposedChart, Line, ReferenceLine, Cell,
 } from "recharts";
 
+// ── Emission factors per kg of raw material (kg CO₂e / kg material) ──────────
+const MATERIAL_FACTORS: Record<string, { label: string; factor: number; note: string }> = {
+  organic_cotton:        { label: "Organic Cotton",       factor: 2.3,  note: "Rain-fed, no synthetic pesticides" },
+  conventional_cotton:   { label: "Conventional Cotton",  factor: 4.0,  note: "Irrigated, fertiliser-intensive" },
+  recycled_polyester:    { label: "Recycled Polyester",   factor: 2.0,  note: "Post-consumer rPET bottles" },
+  virgin_polyester:      { label: "Virgin Polyester",     factor: 5.5,  note: "Petrochemical feedstock" },
+  nylon:                 { label: "Nylon 6 / 6,6",        factor: 7.0,  note: "Energy-intensive synthesis" },
+  wool:                  { label: "Wool (standard)",      factor: 15.0, note: "Includes methane from sheep" },
+  wool_certified:        { label: "Wool (ZQ Certified)",  factor: 9.5,  note: "Regenerative grazing practices" },
+  linen:                 { label: "Linen / Flax",         factor: 1.7,  note: "Low-input, rain-fed crop" },
+  tencel:                { label: "Tencel (Lyocell)",     factor: 1.9,  note: "Closed-loop solvent process" },
+  hemp:                  { label: "Hemp",                 factor: 1.5,  note: "Carbon-sequestering crop" },
+  silk:                  { label: "Silk",                 factor: 15.3, note: "Sericulture & degumming" },
+  cashmere:              { label: "Cashmere",             factor: 28.0, note: "Very high methane + land use" },
+};
+
 export function CarbonCalculator() {
+  // ── Stage calculator state ───────────────────────────────────────────────────
+  const [calcMaterial, setCalcMaterial] = useState<string>("organic_cotton");
+  const [calcWeight, setCalcWeight]     = useState<string>("1.0");
+  // ── Log to Product state ─────────────────────────────────────────────────────
+  const [liveProducts,   setLiveProducts]   = useState<{ id: string; name: string }[]>([]);
+  const [liveSuppliers,  setLiveSuppliers]  = useState<{ id: string; name: string }[]>([]);
+  const [calcProductId,  setCalcProductId]  = useState<string>("");
+  const [calcSupplierId, setCalcSupplierId] = useState<string>("");
+  const [calcStageName,  setCalcStageName]  = useState<string>("Raw Material Sourcing");
+  const [calcWaterL,     setCalcWaterL]     = useState<string>("");
+  const [saving,     setSaving]     = useState(false);
+  const [saveError,  setSaveError]  = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Fetch org-scoped products and suppliers
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    async function load() {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
+      const orgId: string | null = (member as any)?.organization_id ?? null;
+      if (!orgId) return;
+      const [prodRes, supRes] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (client.from("products").select("id, name").eq("organization_id", orgId).order("name") as any),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (client.from("suppliers").select("id, name").eq("organization_id", orgId).order("name") as any),
+      ]);
+      const prods = (prodRes.data ?? []) as { id: string; name: string }[];
+      const sups  = (supRes.data  ?? []) as { id: string; name: string }[];
+      setLiveProducts(prods);
+      setLiveSuppliers(sups);
+      if (prods.length > 0) setCalcProductId(prods[0].id);
+    }
+    load();
+  }, []);
+
+  // Computed CO₂ from the stage calculator
+  const calcWeightNum = parseFloat(calcWeight) || 0;
+  const calcFactor    = MATERIAL_FACTORS[calcMaterial]?.factor ?? 0;
+  const calcCo2       = parseFloat((calcWeightNum * calcFactor).toFixed(3));
+
+  async function handleSaveStage() {
+    if (!supabase) return;
+    if (!calcProductId) { setSaveError("Please select a product."); return; }
+    if (!calcStageName.trim()) { setSaveError("Please enter a stage name."); return; }
+    if (calcCo2 <= 0) { setSaveError("Enter a valid weight greater than 0."); return; }
+    setSaving(true); setSaveError(null); setSaveSuccess(false);
+    const client = supabase;
+    try {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
+      const orgId: string | null = (member as any)?.organization_id ?? null;
+      if (!orgId) throw new Error("No organisation found");
+      // Find max stage_order for this product
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existing } = await (client.from("lifecycle_stages").select("stage_order").eq("product_id", calcProductId).order("stage_order", { ascending: false }).limit(1).maybeSingle() as any);
+      const nextOrder = ((existing as any)?.stage_order ?? 0) + 1;
+      const payload: Record<string, unknown> = {
+        product_id:      calcProductId,
+        organization_id: orgId,
+        stage_name:      calcStageName.trim(),
+        stage_order:     nextOrder,
+        co2_impact_kg:   calcCo2,
+      };
+      if (calcSupplierId) payload.supplier_id = calcSupplierId;
+      const waterNum = parseFloat(calcWaterL);
+      if (!isNaN(waterNum) && waterNum > 0) payload.water_usage_l = waterNum;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (client.from("lifecycle_stages").insert(payload as any) as any);
+      if (error) throw error;
+      setSaveSuccess(true);
+      setCalcStageName("Raw Material Sourcing");
+      setCalcWaterL("");
+      setTimeout(() => setSaveSuccess(false), 4000);
+    } catch (e: unknown) {
+      setSaveError(e instanceof Error ? e.message : "Save failed — please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const [cottonVol, setCottonVol] = useState(12000);
   const [woolVol, setWoolVol] = useState(4500);
   const [cottonMat, setCottonMat] = useState<"organic" | "conventional">("organic");
@@ -334,6 +439,208 @@ export function CarbonCalculator() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Stage CO₂ Calculator + Log to Product ─────────────────────────────── */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+        {/* Left: Stage Calculator */}
+        <div className="bg-card rounded-xl shadow-sm border border-card-border p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4 text-primary" />
+            </div>
+            <h3 className="font-semibold text-foreground">Stage CO₂ Estimator</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-5 ml-10">
+            Select a material and weight to instantly estimate its carbon impact
+          </p>
+
+          <div className="space-y-4">
+            {/* Material selector */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Material</label>
+              <select
+                value={calcMaterial}
+                onChange={e => setCalcMaterial(e.target.value)}
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {Object.entries(MATERIAL_FACTORS).map(([key, m]) => (
+                  <option key={key} value={key}>{m.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {MATERIAL_FACTORS[calcMaterial]?.note} · <span className="font-medium text-foreground">{MATERIAL_FACTORS[calcMaterial]?.factor} kg CO₂e / kg</span>
+              </p>
+            </div>
+
+            {/* Weight input */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Weight (kg)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                value={calcWeight}
+                onChange={e => setCalcWeight(e.target.value)}
+                placeholder="e.g. 1.5"
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            {/* Result — big live number */}
+            <div className={`rounded-xl border-2 p-5 text-center transition-colors ${calcCo2 > 0 ? "bg-primary/5 border-primary/30" : "bg-muted/40 border-border"}`}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1">Estimated CO₂ Impact</p>
+              <p className={`text-5xl font-extrabold tracking-tight transition-colors ${calcCo2 > 0 ? "text-primary" : "text-muted-foreground/40"}`}>
+                {calcCo2 > 0 ? calcCo2.toFixed(2) : "—"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">kg CO₂e</p>
+              {calcCo2 > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {calcWeightNum} kg × {calcFactor} kg CO₂e/kg = <span className="font-medium text-foreground">{calcCo2} kg CO₂e</span>
+                </p>
+              )}
+            </div>
+
+            {/* Reference bars vs common materials */}
+            {calcCo2 > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">How this compares (per kg)</p>
+                {[
+                  { label: "Hemp",        val: 1.5  },
+                  { label: "Tencel",      val: 1.9  },
+                  { label: "Org. Cotton", val: 2.3  },
+                  { label: "Conv. Cotton",val: 4.0  },
+                  { label: "Nylon",       val: 7.0  },
+                  { label: "Cashmere",    val: 28.0 },
+                ].map(ref => {
+                  const pct = Math.min(100, Math.round((ref.val / 28) * 100));
+                  const isThis = Math.abs(ref.val - calcFactor) < 0.01;
+                  return (
+                    <div key={ref.label} className="flex items-center gap-2">
+                      <span className={`text-[10px] w-20 shrink-0 ${isThis ? "font-semibold text-primary" : "text-muted-foreground"}`}>{ref.label}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className={`h-full rounded-full ${isThis ? "bg-primary" : "bg-slate-300"}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className={`text-[10px] w-8 text-right ${isThis ? "font-semibold text-primary" : "text-muted-foreground"}`}>{ref.val}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Log to Product */}
+        <div className="bg-card rounded-xl shadow-sm border border-card-border p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
+              <PackagePlus className="w-4 h-4 text-green-600" />
+            </div>
+            <h3 className="font-semibold text-foreground">Log to Product</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-5 ml-10">
+            Save the calculated CO₂ directly as a lifecycle stage on one of your products
+          </p>
+
+          <div className="space-y-4">
+            {/* Product selector */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Product</label>
+              {liveProducts.length === 0 ? (
+                <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2.5 border border-border">
+                  No products found — add a product in the Traceability page first.
+                </p>
+              ) : (
+                <select
+                  value={calcProductId}
+                  onChange={e => setCalcProductId(e.target.value)}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                >
+                  {liveProducts.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              )}
+            </div>
+
+            {/* Supplier selector */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Supplier <span className="normal-case font-normal">(optional)</span>
+              </label>
+              <select
+                value={calcSupplierId}
+                onChange={e => setCalcSupplierId(e.target.value)}
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <option value="">— No supplier —</option>
+                {liveSuppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+
+            {/* Stage name */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">Stage Name</label>
+              <input
+                type="text"
+                value={calcStageName}
+                onChange={e => setCalcStageName(e.target.value)}
+                placeholder="e.g. Raw Material Sourcing"
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            {/* Water usage (optional) */}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Water Usage (L) <span className="normal-case font-normal">(optional)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={calcWaterL}
+                onChange={e => setCalcWaterL(e.target.value)}
+                placeholder="e.g. 1800"
+                className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+
+            {/* CO₂ preview row */}
+            <div className="bg-muted/40 border border-border rounded-lg px-4 py-3 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">CO₂ to log</p>
+              <p className={`text-base font-bold ${calcCo2 > 0 ? "text-primary" : "text-muted-foreground/50"}`}>
+                {calcCo2 > 0 ? `${calcCo2.toFixed(2)} kg CO₂e` : "—"}
+              </p>
+            </div>
+
+            {/* Error / success feedback */}
+            {saveError && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                <p className="text-xs text-red-700">{saveError}</p>
+              </div>
+            )}
+            {saveSuccess && (
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                <p className="text-xs text-green-700 font-medium">Stage saved! View it in the Lifecycle Traceability page.</p>
+              </div>
+            )}
+
+            {/* Save button */}
+            <button
+              onClick={handleSaveStage}
+              disabled={saving || liveProducts.length === 0 || calcCo2 <= 0}
+              className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2.5 rounded-md text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving
+                ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Saving…</>
+                : <><Save className="w-4 h-4" /> Save Stage</>
+              }
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   );
