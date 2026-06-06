@@ -52,9 +52,24 @@ export function SupplierPortal() {
         return;
       }
 
-      const { data, error } = await supabase
+      // Resolve tenant before querying
+      const client = supabase;
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) { setLoading(false); return; }
+      const { data: memberRow } = await client
+        .from("organization_members")
+        .select("organization_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orgId: string | null = (memberRow as any)?.organization_id ?? null;
+      if (!orgId) { setSuppliers([]); setLoading(false); return; }
+
+      const { data, error } = await client
         .from("suppliers")
         .select("id, name, contact_name, location, tier, status, stage, data_completeness, last_activity")
+        .eq("organization_id", orgId)
         .order("tier", { ascending: true });
 
       if (cancelled) return;

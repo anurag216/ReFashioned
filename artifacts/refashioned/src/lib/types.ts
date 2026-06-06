@@ -40,7 +40,7 @@ export interface Product {
 export interface OrganizationMember {
   id: string;
   organization_id: string;
-  user_id: string;              // references auth.users.id
+  profile_id: string;           // references auth.users.id
   role: "admin" | "manager" | "viewer";
   joined_at: string;
   created_at: string;

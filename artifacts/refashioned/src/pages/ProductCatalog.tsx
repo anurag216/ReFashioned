@@ -46,9 +46,25 @@ export function ProductCatalog() {
     setLoading(true);
     setFetchError(null);
     if (!supabase) { setLoading(false); return; }
-    const { data, error } = await supabase
+    const client = supabase;
+
+    // Resolve tenant
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) { setLoading(false); return; }
+    const { data: member } = await client
+      .from("organization_members")
+      .select("organization_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgId: string | null = (member as any)?.organization_id ?? null;
+    if (!orgId) { setProducts([]); setLoading(false); return; }
+
+    const { data, error } = await client
       .from("products")
       .select("*")
+      .eq("organization_id", orgId)
       .order("created_at", { ascending: false });
     if (error) setFetchError(error.message);
     else setProducts((data ?? []) as Product[]);
@@ -118,8 +134,14 @@ export function ProductCatalog() {
 
   async function handleDelete(id: string) {
     if (!supabase) return;
+    const product = products.find(p => p.id === id);
+    if (!product) return;
     setDeletingId(id);
-    await supabase.from("products").delete().eq("id", id);
+    await supabase
+      .from("products")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", product.organization_id);
     setProducts(prev => prev.filter(p => p.id !== id));
     setDeletingId(null);
   }

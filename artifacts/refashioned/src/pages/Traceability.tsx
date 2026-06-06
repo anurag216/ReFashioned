@@ -52,16 +52,29 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   useEffect(() => {
     if (!supabase) { setProductsLoading(false); return; }
     const client = supabase;
-    client
-      .from("products")
-      .select("id, name, sku")
-      .order("name")
-      .then(({ data }) => {
-        const list = (data ?? []) as { id: string; name: string; sku: string | null }[];
-        setProducts(list);
-        if (list.length > 0) setSelectedProduct(list[0].id);
-        setProductsLoading(false);
-      });
+    async function loadProducts() {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) { setProductsLoading(false); return; }
+      const { data: member } = await client
+        .from("organization_members")
+        .select("organization_id")
+        .eq("profile_id", user.id)
+        .limit(1)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orgId: string | null = (member as any)?.organization_id ?? null;
+      if (!orgId) { setProductsLoading(false); return; }
+      const { data } = await client
+        .from("products")
+        .select("id, name, sku")
+        .eq("organization_id", orgId)
+        .order("name");
+      const list = (data ?? []) as { id: string; name: string; sku: string | null }[];
+      setProducts(list);
+      if (list.length > 0) setSelectedProduct(list[0].id);
+      setProductsLoading(false);
+    }
+    loadProducts();
   }, []);
 
   useEffect(() => {
