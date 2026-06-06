@@ -4,8 +4,9 @@ import {
   AlertCircle, Archive, RefreshCw, ShoppingBag,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import type { Product } from "../lib/types";
 import { usePermissions } from "../lib/auth/usePermissions";
+import { useQueryClient } from "@tanstack/react-query";
+import { useProducts } from "../lib/api/useProducts";
 
 type ProductStatus = "draft" | "in_review" | "published" | "archived";
 
@@ -30,9 +31,9 @@ interface FormState {
 const EMPTY_FORM: FormState = { name: "", sku: "", season: "", status: "draft" };
 
 export function ProductCatalog() {
-  const [products, setProducts]     = useState<Product[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const { data: products = [], isLoading: loading, error: fetchErrorObj } = useProducts();
+  const queryClient = useQueryClient();
+  const fetchError = fetchErrorObj instanceof Error ? fetchErrorObj.message : null;
   const [search, setSearch]         = useState("");
   const [showModal, setShowModal]   = useState(false);
   const [form, setForm]             = useState<FormState>(EMPTY_FORM);
@@ -44,38 +45,7 @@ export function ProductCatalog() {
   const { canEdit } = usePermissions();
   const nameRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { fetchProducts(); }, []);
   useEffect(() => { if (showModal) setTimeout(() => nameRef.current?.focus(), 80); }, [showModal]);
-
-  async function fetchProducts() {
-    setLoading(true);
-    setFetchError(null);
-    if (!supabase) { setLoading(false); return; }
-    const client = supabase;
-
-    // Resolve tenant
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) { setLoading(false); return; }
-    const { data: member } = await client
-      .from("organization_members")
-      .select("organization_id")
-      .eq("profile_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orgId: string | null = (member as any)?.organization_id ?? null;
-    if (!orgId) { setProducts([]); setLoading(false); return; }
-
-    const { data, error } = await client
-      .from("products")
-      .select("*")
-      .eq("organization_id", orgId)
-      .neq("status", "archived")
-      .order("created_at", { ascending: false });
-    if (error) setFetchError(error.message);
-    else setProducts((data ?? []) as Product[]);
-    setLoading(false);
-  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -134,7 +104,7 @@ export function ProductCatalog() {
 
     setShowModal(false);
     setForm(EMPTY_FORM);
-    fetchProducts();
+    void queryClient.invalidateQueries({ queryKey: ["products"] });
     setSaving(false);
   }
 
@@ -149,7 +119,7 @@ export function ProductCatalog() {
       .update({ status: "archived" })
       .eq("id", id)
       .eq("organization_id", product.organization_id);
-    setProducts(prev => prev.filter(p => p.id !== id));
+    void queryClient.invalidateQueries({ queryKey: ["products"] });
     setArchiveTarget(null);
     setArchiving(false);
     setArchivedBanner(true);
@@ -216,7 +186,7 @@ export function ProductCatalog() {
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{fetchError}</span>
-          <button onClick={fetchProducts} className="ml-auto flex items-center gap-1 text-xs font-medium hover:underline">
+          <button onClick={() => void queryClient.invalidateQueries({ queryKey: ["products"] })} className="ml-auto flex items-center gap-1 text-xs font-medium hover:underline">
             <RefreshCw className="w-3 h-3" /> Retry
           </button>
         </div>

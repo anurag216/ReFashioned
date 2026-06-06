@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Building, UserCheck, Clock, AlertTriangle, XCircle, RefreshCcw,
   Plus, Search, Send, CheckCircle2, X, MapPin, MoreHorizontal,
   Link2, MailOpen, Upload, FileBadge, Copy,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { useSuppliers, type SupplierRow } from "../lib/api/useSuppliers";
 
 export function SupplierPortal() {
   const [activeFilter, setActiveFilter] = useState("all");
@@ -16,94 +17,15 @@ export function SupplierPortal() {
   const [linkCopied, setLinkCopied]       = useState(false);
   const [inviteError, setInviteError]     = useState<string | null>(null);
   const [selectedCerts, setSelectedCerts] = useState<string[]>(["GOTS", "Fair Trade"]);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", location: "", tier: "1", status: "active" as "active" | "inactive" | "under_review" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  type SupplierStatus = "active" | "needs-action" | "pending" | "invited" | "not-invited";
+  const { data: suppliers = [], isLoading: loading, error: fetchErrorObj, refetch } = useSuppliers();
+  const fetchError = fetchErrorObj instanceof Error ? fetchErrorObj.message : null;
 
-  type SupplierRow = {
-    id: string | number;
-    name: string;
-    contact: string;
-    location: string;
-    tier: 1 | 2 | 3;
-    status: SupplierStatus;
-    stage: string;
-    certs: { name: string; status: "uploaded" | "missing" | "expiring" }[];
-    dataCompleteness: number;
-    lastActivity: string;
-  };
-
-  const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchSuppliers() {
-      setLoading(true);
-      setFetchError(null);
-
-      if (!supabase) {
-        setFetchError("Supabase credentials not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Replit Secrets.");
-        setSuppliers([]);
-        setLoading(false);
-        return;
-      }
-
-      // Resolve tenant before querying
-      const client = supabase;
-      const { data: { user } } = await client.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      const { data: memberRow } = await client
-        .from("organization_members")
-        .select("organization_id")
-        .eq("profile_id", user.id)
-        .limit(1)
-        .maybeSingle();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orgId: string | null = (memberRow as any)?.organization_id ?? null;
-      if (!orgId) { setSuppliers([]); setLoading(false); return; }
-
-      const { data, error } = await client
-        .from("suppliers")
-        .select("id, name, contact_name, location, tier, status, stage, data_completeness, last_activity")
-        .eq("organization_id", orgId)
-        .order("tier", { ascending: true });
-
-      if (cancelled) return;
-
-      if (error) {
-        setFetchError(error.message);
-        setSuppliers([]);
-      } else {
-        const mapped: SupplierRow[] = (data ?? []).map((r: Record<string, unknown>) => ({
-          id:               r.id as string | number,
-          name:             (r.name          as string) ?? "—",
-          contact:          (r.contact_name  as string) ?? "—",
-          location:         (r.location      as string) ?? "—",
-          tier:             (r.tier          as 1 | 2 | 3) ?? 1,
-          status:           (r.status        as SupplierStatus) ?? "not-invited",
-          stage:            (r.stage         as string) ?? "—",
-          certs:            [],
-          dataCompleteness: (r.data_completeness as number) ?? 0,
-          lastActivity:     (r.last_activity as string) ?? "—",
-        }));
-        setSuppliers(mapped);
-      }
-
-      setLoading(false);
-    }
-
-    fetchSuppliers();
-    return () => { cancelled = true; };
-  }, [refreshKey]);
-
-  const statusConfig: Record<SupplierStatus, { label: string; color: string; bg: string; border: string; dot: string }> = {
+  const statusConfig: Record<SupplierRow["status"], { label: string; color: string; bg: string; border: string; dot: string }> = {
     "active":       { label: "Active",        color: "text-green-700",  bg: "bg-green-50",  border: "border-green-200",  dot: "bg-green-500"  },
     "needs-action": { label: "Needs Action",  color: "text-red-700",   bg: "bg-red-50",    border: "border-red-200",    dot: "bg-red-500"    },
     "pending":      { label: "Data Pending",  color: "text-amber-700", bg: "bg-amber-50",  border: "border-amber-200",  dot: "bg-amber-500"  },
@@ -185,7 +107,7 @@ export function SupplierPortal() {
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
     setShowAddModal(false);
     setAddForm({ name: "", location: "", tier: "1", status: "active" });
-    setRefreshKey(k => k + 1);
+    void refetch();
     setSaving(false);
   }
 
