@@ -21,6 +21,7 @@ const RegulatoryRadar = lazy(() => import("./pages/RegulatoryRadar").then(m => (
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.NotFound })));
 const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ default: m.ProductCatalog })));
 const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ default: m.PublicPassport })));
+const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -89,6 +90,8 @@ const navItems = [
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [orgCheckLoading, setOrgCheckLoading] = useState(true);
+  const [hasOrg, setHasOrg] = useState(false);
   const [location, setLocation] = useLocation();
 
   useEffect(() => {
@@ -102,6 +105,29 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // Check whether the authenticated user belongs to an org
+  useEffect(() => {
+    if (!session) {
+      setHasOrg(false);
+      setOrgCheckLoading(false);
+      return;
+    }
+    if (!supabase) { setOrgCheckLoading(false); return; }
+    const client = supabase;
+    setOrgCheckLoading(true);
+    (async () => {
+      const { data: member } = await client
+        .from("organization_members")
+        .select("organization_id")
+        .eq("profile_id", session.user.id)
+        .limit(1)
+        .maybeSingle();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setHasOrg(!!(member as any)?.organization_id);
+      setOrgCheckLoading(false);
+    })();
+  }, [session]);
 
   // Public DPP route — accessible without authentication
   if (location.startsWith("/p/")) {
@@ -119,6 +145,23 @@ export default function App() {
 
   if (!session) {
     return <LoginScreen />;
+  }
+
+  // Wait for org membership check before rendering anything authenticated
+  if (orgCheckLoading) {
+    return <DarkSpinner fullScreen />;
+  }
+
+  // New user with no org — send them through onboarding before the shell
+  if (!hasOrg) {
+    return (
+      <Suspense fallback={<DarkSpinner fullScreen />}>
+        <Onboarding
+          session={session}
+          onComplete={() => { setHasOrg(true); setLocation("/dashboard"); }}
+        />
+      </Suspense>
+    );
   }
 
   // DPP is a full-screen public-style view — rendered outside the app shell
