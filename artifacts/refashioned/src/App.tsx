@@ -49,6 +49,30 @@ function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   );
 }
 
+function SidebarOrgBadge() {
+  const [orgName, setOrgName] = useState<string | null>(null);
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    (async () => {
+      const { data: { user } } = await client.auth.getUser();
+      if (!user) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const id: string | null = (member as any)?.organization_id ?? null;
+      if (!id) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: org } = await (client.from("organizations").select("name").eq("id", id).maybeSingle() as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const name: string | null = (org as any)?.name ?? null;
+      if (name) setOrgName(name);
+    })();
+  }, []);
+  if (!orgName) return null;
+  return <span className="text-[10px] text-sidebar-foreground/50 truncate leading-tight">{orgName}</span>;
+}
+
 const navItems = [
   { path: "/dashboard",    label: "Dashboard",                icon: LayoutDashboard },
   { path: "/products",     label: "Products",                 icon: Package         },
@@ -113,10 +137,13 @@ export default function App() {
       <aside className="w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col shrink-0">
         <div className="h-16 flex items-center px-6 border-b border-sidebar-border/30">
           <div className="flex items-center gap-2">
-            <div className="bg-sidebar-primary text-sidebar-primary-foreground p-1.5 rounded-md">
+            <div className="bg-sidebar-primary text-sidebar-primary-foreground p-1.5 rounded-md shrink-0">
               <Grid className="w-4 h-4" />
             </div>
-            <span className="font-semibold text-lg tracking-tight">RE:Fashioned</span>
+            <div className="flex flex-col min-w-0">
+              <span className="font-semibold text-sm tracking-tight leading-tight">RE:Fashioned</span>
+              <SidebarOrgBadge />
+            </div>
           </div>
         </div>
 

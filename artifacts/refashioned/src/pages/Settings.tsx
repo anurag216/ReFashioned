@@ -1,8 +1,56 @@
-import { useState } from "react";
-import { Settings as SettingsIcon, User, Camera } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Settings as SettingsIcon, User, Camera, CheckCircle2, AlertTriangle } from "lucide-react";
+import { supabase } from "../lib/supabaseClient";
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState("account");
+
+  const [orgId,          setOrgId]          = useState<string | null>(null);
+  const [orgName,        setOrgName]        = useState("");
+  const [userEmail,      setUserEmail]      = useState("");
+  const [orgSaving,      setOrgSaving]      = useState(false);
+  const [orgSaveError,   setOrgSaveError]   = useState<string | null>(null);
+  const [orgSaveSuccess, setOrgSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    (async () => {
+      const { data: { user } } = await client.auth.getUser();
+      if (user?.email) setUserEmail(user.email);
+      if (!user) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const id: string | null = (member as any)?.organization_id ?? null;
+      setOrgId(id);
+      if (!id) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: org } = await (client.from("organizations").select("name").eq("id", id).maybeSingle() as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((org as any)?.name) setOrgName((org as any).name);
+    })();
+  }, []);
+
+  async function handleSaveChanges() {
+    if (!supabase || !orgId || !orgName.trim()) {
+      setOrgSaveError("Company name cannot be empty.");
+      return;
+    }
+    setOrgSaving(true); setOrgSaveError(null); setOrgSaveSuccess(false);
+    const client = supabase;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await ((client.from("organizations") as any).update({ name: orgName.trim() }).eq("id", orgId));
+      if (error) throw error;
+      setOrgSaveSuccess(true);
+      setTimeout(() => setOrgSaveSuccess(false), 4000);
+    } catch (e: unknown) {
+      setOrgSaveError(e instanceof Error ? e.message : "Save failed — please try again.");
+    } finally {
+      setOrgSaving(false);
+    }
+  }
 
   const tabs = [
     { id: "account", label: "Account Information" },
@@ -19,8 +67,15 @@ export function Settings() {
           <h1 className="text-2xl font-bold text-foreground">Account Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">Customize your account information and platform features</p>
         </div>
-        <button className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
-          Save Changes
+        <button
+          onClick={handleSaveChanges}
+          disabled={orgSaving}
+          className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2 rounded-md text-sm font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {orgSaving
+            ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Saving…</>
+            : "Save Changes"
+          }
         </button>
       </div>
 
@@ -37,6 +92,19 @@ export function Settings() {
           ))}
         </div>
       </div>
+
+      {orgSaveSuccess && (
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+          <p className="text-sm text-green-700 font-medium">Changes saved successfully.</p>
+        </div>
+      )}
+      {orgSaveError && (
+        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+          <p className="text-sm text-red-700">{orgSaveError}</p>
+        </div>
+      )}
 
       {activeTab === "account" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -95,7 +163,12 @@ export function Settings() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Email Address</label>
-                  <input type="email" defaultValue="emma.johnson@fashionbrand.com" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                  <input
+                    type="email"
+                    value={userEmail}
+                    readOnly
+                    className="w-full bg-muted/50 border border-border rounded-md px-3 py-2 text-sm focus:outline-none text-muted-foreground cursor-default"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-foreground">Phone Number</label>
@@ -123,7 +196,13 @@ export function Settings() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">Company Name</label>
-                    <input type="text" defaultValue="EcoStyle Fashion" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                    <input
+                      type="text"
+                      value={orgName}
+                      onChange={e => setOrgName(e.target.value)}
+                      placeholder="Your organisation name"
+                      className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-foreground">Industry</label>
