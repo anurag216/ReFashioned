@@ -1,6 +1,7 @@
 import { useState, useEffect, type ElementType } from "react";
 import { useSearch } from "wouter";
 import { supabase } from "../lib/supabaseClient";
+import { usePermissions } from "../lib/auth/usePermissions";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
@@ -52,6 +53,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
   const [productStatus, setProductStatus] = useState<"draft" | "in_review" | "published" | null>(null);
   const [publishLoading, setPublishLoading] = useState(false);
   const [publishBanner, setPublishBanner] = useState<"published" | "draft" | null>(null);
+  const { isAdmin } = usePermissions();
 
   useEffect(() => {
     if (!supabase) { setProductLoading(false); return; }
@@ -246,7 +248,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
             </div>
 
             {/* Publish / Unpublish toggle */}
-            {productStatus !== null && (
+            {isAdmin && productStatus !== null && (
               <div className="flex items-center gap-2">
                 {productStatus === "published" && (
                   <div className="flex items-center gap-1.5">

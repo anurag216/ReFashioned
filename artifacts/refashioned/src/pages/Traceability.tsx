@@ -4,6 +4,7 @@ import {
   Package, FileCheck, Download, CheckCircle2, XCircle, Zap, Plus, Paperclip,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { usePermissions } from "../lib/auth/usePermissions";
 
 // Stage name → icon/colour — purely presentational, lives client-side
 const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconColor: string }> = {
@@ -44,6 +45,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
+  const { canEdit } = usePermissions();
   const [orgSuppliers, setOrgSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [addForm, setAddForm] = useState({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
   const [saving, setSaving] = useState(false);
@@ -319,7 +321,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
             <span className="text-xs text-muted-foreground">
               {loading ? "Loading…" : `${rows.length} stages tracked`}
             </span>
-            {selectedProduct && (
+            {selectedProduct && canEdit && (
               <button
                 onClick={() => { setShowAddModal(true); setSaveError(null); }}
                 className="flex items-center gap-1.5 bg-[#6AE096] hover:bg-[#5acc85] text-[#0d2b1e] px-3 py-1.5 rounded-md text-xs font-semibold transition-colors shadow-sm"

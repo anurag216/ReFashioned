@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { Organization } from "../lib/types";
+import { usePermissions } from "../lib/auth/usePermissions";
 import {
   Share, CheckCircle2, Copy, QrCode, Edit2, Leaf, Droplets,
   RefreshCw, User, ChevronRight, Save, X, AlertTriangle,
@@ -19,6 +20,7 @@ export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const { isAdmin } = usePermissions();
 
   useEffect(() => {
     if (!supabase) { setOrgLoading(false); return; }
@@ -139,13 +141,15 @@ export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void
         <div className="bg-card rounded-lg p-6 shadow-sm border border-card-border relative">
           {!editing ? (
             <>
-              <button
-                onClick={startEdit}
-                className="absolute top-4 right-4 p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
-                title="Edit brand information"
-              >
-                <Edit2 className="w-4 h-4" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={startEdit}
+                  className="absolute top-4 right-4 p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                  title="Edit brand information"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              )}
               <h3 className="font-semibold text-foreground mb-4">Brand Information</h3>
               <div className="space-y-4">
                 <div>

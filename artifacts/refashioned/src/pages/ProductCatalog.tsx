@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import type { Product } from "../lib/types";
+import { usePermissions } from "../lib/auth/usePermissions";
 
 type ProductStatus = "draft" | "in_review" | "published" | "archived";
 
@@ -40,6 +41,7 @@ export function ProductCatalog() {
   const [archiveTarget, setArchiveTarget] = useState<string | null>(null);
   const [archiving, setArchiving]         = useState(false);
   const [archivedBanner, setArchivedBanner] = useState(false);
+  const { canEdit } = usePermissions();
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchProducts(); }, []);
@@ -173,13 +175,15 @@ export function ProductCatalog() {
             {loading ? "Loading…" : `${products.length} product${products.length !== 1 ? "s" : ""} in your catalog`}
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-[0_0_20px_hsl(145_65%_50%/0.35)] shrink-0"
-          style={{ background: "linear-gradient(135deg,#6AE096 0%,#3dcc72 100%)", color: "#0d2a1f" }}
-        >
-          <Plus className="w-4 h-4" /> Create Product
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-[0_0_20px_hsl(145_65%_50%/0.35)] shrink-0"
+            style={{ background: "linear-gradient(135deg,#6AE096 0%,#3dcc72 100%)", color: "#0d2a1f" }}
+          >
+            <Plus className="w-4 h-4" /> Create Product
+          </button>
+        )}
       </div>
 
       {/* ── Search bar ─────────────────────────────────────────────── */}
@@ -317,13 +321,15 @@ export function ProductCatalog() {
                     {new Date(product.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                   </td>
                   <td className="px-5 py-4">
-                    <button
-                      onClick={() => setArchiveTarget(product.id)}
-                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
-                      title="Archive product"
-                    >
-                      <Archive className="w-3.5 h-3.5" />
-                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={() => setArchiveTarget(product.id)}
+                        className="p-1.5 rounded-md text-muted-foreground/40 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Archive product"
+                      >
+                        <Archive className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

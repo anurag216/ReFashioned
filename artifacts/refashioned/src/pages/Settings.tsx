@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Settings as SettingsIcon, User, Camera, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { usePermissions } from "../lib/auth/usePermissions";
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState("account");
@@ -11,6 +12,7 @@ export function Settings() {
   const [orgSaving,      setOrgSaving]      = useState(false);
   const [orgSaveError,   setOrgSaveError]   = useState<string | null>(null);
   const [orgSaveSuccess, setOrgSaveSuccess] = useState(false);
+  const { isAdmin } = usePermissions();
 
   useEffect(() => {
     if (!supabase) return;
@@ -67,16 +69,18 @@ export function Settings() {
           <h1 className="text-2xl font-bold text-foreground">Account Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">Customize your account information and platform features</p>
         </div>
-        <button
-          onClick={handleSaveChanges}
-          disabled={orgSaving}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2 rounded-md text-sm font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {orgSaving
-            ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Saving…</>
-            : "Save Changes"
-          }
-        </button>
+        {isAdmin && (
+          <button
+            onClick={handleSaveChanges}
+            disabled={orgSaving}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2 rounded-md text-sm font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {orgSaving
+              ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Saving…</>
+              : "Save Changes"
+            }
+          </button>
+        )}
       </div>
 
       <div className="border-b border-border overflow-x-auto hide-scrollbar">
