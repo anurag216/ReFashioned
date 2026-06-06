@@ -6,7 +6,7 @@ import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
   CheckCircle2, ThumbsUp, ThumbsDown, AlertTriangle, Droplets,
-  X, Copy, Check,
+  X, Copy, Check, Globe, EyeOff,
 } from "lucide-react";
 
 interface DppStageRow {
@@ -48,13 +48,16 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
   const [fetchedProductId, setFetchedProductId] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [productStatus, setProductStatus] = useState<"draft" | "in_review" | "published" | null>(null);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishBanner, setPublishBanner] = useState<"published" | "draft" | null>(null);
 
   useEffect(() => {
     if (!supabase) { setProductLoading(false); return; }
     const client = supabase;
     async function fetchProduct() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let q = (client.from("products").select("id, name, sku") as any);
+      let q = (client.from("products").select("id, name, sku, status") as any);
       if (productId) q = q.eq("id", productId);
       else q = q.order("name");
       const { data } = await q.limit(1).maybeSingle();
@@ -62,6 +65,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
         setProductName(data.name ?? "Unknown Product");
         setProductSku(data.sku ?? null);
         setFetchedProductId(data.id ?? null);
+        setProductStatus((data.status as "draft" | "in_review" | "published") ?? "draft");
       }
       setProductLoading(false);
     }
@@ -184,6 +188,28 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     { label: "Circularity Score", unit: "/100", thisProd: 85, industryAvg: 38, less: "85/100 Score", barColor: "bg-purple-400", avgColor: "bg-slate-300", higherIsBetter: true },
   ];
 
+  async function handlePublishToggle() {
+    if (!supabase || publishLoading) return;
+    const targetId = productId ?? fetchedProductId;
+    if (!targetId) return;
+    const current = productStatus;
+    const next: "draft" | "published" = current === "published" ? "draft" : "published";
+    setProductStatus(next);
+    setPublishLoading(true);
+    setPublishBanner(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from("products") as any)
+      .update({ status: next })
+      .eq("id", targetId);
+    if (error) {
+      setProductStatus(current);
+    } else {
+      setPublishBanner(next);
+      setTimeout(() => setPublishBanner(null), 3500);
+    }
+    setPublishLoading(false);
+  }
+
   const displayStages = !stagesLoading && liveStages.length > 0 ? liveStages : stages;
 
   return (
@@ -211,17 +237,65 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-full px-3 py-1 bg-muted/50">
               <ScanLine className="w-3.5 h-3.5" /> Scanned via QR Code
             </div>
-            <button
-              data-testid="button-dpp-share"
-              onClick={() => setShowQR(true)}
-              disabled={productLoading || (!productId && !fetchedProductId)}
-              className="flex items-center gap-1.5 bg-primary text-white hover:bg-primary/90 px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Share className="w-3.5 h-3.5" /> Share
-            </button>
+
+            {/* Publish / Unpublish toggle */}
+            {productStatus !== null && (
+              <div className="flex items-center gap-2">
+                {productStatus === "published" && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-xs text-green-600 font-medium hidden sm:block">Live</span>
+                  </div>
+                )}
+                <button
+                  onClick={handlePublishToggle}
+                  disabled={publishLoading || productLoading}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                    productStatus === "published"
+                      ? "bg-muted text-muted-foreground border border-border hover:bg-muted/80"
+                      : "bg-[#6AE096] text-[#12382B] hover:opacity-90"
+                  }`}
+                >
+                  {publishLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : productStatus === "published" ? (
+                    <><EyeOff className="w-3.5 h-3.5" /> Unpublish</>
+                  ) : (
+                    <><Globe className="w-3.5 h-3.5" /> Publish Passport</>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Share / QR — disabled until published */}
+            <div title={productStatus !== "published" ? "Publish this passport to generate a shareable link." : undefined}>
+              <button
+                data-testid="button-dpp-share"
+                onClick={() => setShowQR(true)}
+                disabled={productLoading || (!productId && !fetchedProductId) || productStatus !== "published"}
+                className="flex items-center gap-1.5 bg-primary text-white hover:bg-primary/90 px-4 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Share className="w-3.5 h-3.5" /> Share
+              </button>
+            </div>
           </div>
         </div>
       </header>
+
+      {/* Publish status banner */}
+      {publishBanner && (
+        <div
+          className={`text-sm py-2.5 px-6 text-center font-medium ${
+            publishBanner === "published"
+              ? "bg-green-50 text-green-700 border-b border-green-200"
+              : "bg-amber-50 text-amber-700 border-b border-amber-200"
+          }`}
+        >
+          {publishBanner === "published"
+            ? "✓ Passport is now live — anyone with the link can view it."
+            : "Passport set to draft — no longer publicly accessible."}
+        </div>
+      )}
 
       {/* Hero */}
       <div className="bg-[#12382B] text-white">
