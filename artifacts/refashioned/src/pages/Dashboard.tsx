@@ -34,7 +34,7 @@ export function Dashboard({ onViewMetrics }: { onViewMetrics?: () => void }) {
         client.from("suppliers").select("status, data_completeness").eq("organization_id", orgId),
         client.from("lifecycle_stages").select("stage_name, co2_impact_kg, water_usage_l").eq("organization_id", orgId),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (client.from("products") as any).select("id", { count: "exact", head: true }).eq("organization_id", orgId),
+        (client.from("products") as any).select("id", { count: "exact", head: true }).eq("organization_id", orgId).neq("status", "archived"),
       ]);
       if (cancelled) return;
       if (!sRes.error)  setLiveSuppliers(sRes.data  ?? []);

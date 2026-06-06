@@ -70,6 +70,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         .from("products")
         .select("id, name, sku")
         .eq("organization_id", orgId)
+        .neq("status", "archived")
         .order("name");
       const list = (data ?? []) as { id: string; name: string; sku: string | null }[];
       setProducts(list);

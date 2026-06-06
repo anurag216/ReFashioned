@@ -32,7 +32,7 @@ export interface Product {
   name: string;
   sku: string | null;
   season: string | null;
-  status: "draft" | "in_review" | "published";
+  status: "draft" | "in_review" | "published" | "archived";
   created_at: string;
   updated_at: string;
 }
@@ -184,7 +184,7 @@ export type Database = {
     Views:     Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
-      product_status:   "draft" | "in_review" | "published";
+      product_status:   "draft" | "in_review" | "published" | "archived";
       supplier_status:  "active" | "inactive" | "under_review";
       dpp_status:       "draft" | "published" | "archived";
       compliance_status: "compliant" | "non_compliant" | "pending";

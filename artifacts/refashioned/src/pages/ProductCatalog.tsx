@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Plus, Package, Search, X, CheckCircle2, Clock,
-  AlertCircle, Trash2, RefreshCw, ShoppingBag,
+  AlertCircle, Archive, RefreshCw, ShoppingBag,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import type { Product } from "../lib/types";
 
-type ProductStatus = "draft" | "in_review" | "published";
+type ProductStatus = "draft" | "in_review" | "published" | "archived";
 
 const statusConfig: Record<ProductStatus, {
   label: string; dot: string; bg: string; color: string; border: string; icon: typeof Clock;
@@ -14,6 +14,7 @@ const statusConfig: Record<ProductStatus, {
   draft:      { label: "Draft",       dot: "bg-slate-400",  bg: "bg-slate-50",  color: "text-slate-600",  border: "border-slate-200", icon: Clock         },
   in_review:  { label: "In Review",   dot: "bg-amber-400",  bg: "bg-amber-50",  color: "text-amber-700",  border: "border-amber-200", icon: AlertCircle   },
   published:  { label: "Published",   dot: "bg-green-500",  bg: "bg-green-50",  color: "text-green-700",  border: "border-green-200", icon: CheckCircle2  },
+  archived:   { label: "Archived",    dot: "bg-slate-300",  bg: "bg-slate-50",  color: "text-slate-400",  border: "border-slate-200", icon: Archive       },
 };
 
 const SEASONS = ["SS24", "AW24", "SS25", "AW25", "SS26", "AW26", "Evergreen"];
@@ -36,7 +37,9 @@ export function ProductCatalog() {
   const [form, setForm]             = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving]         = useState(false);
   const [saveError, setSaveError]   = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<string | null>(null);
+  const [archiving, setArchiving]         = useState(false);
+  const [archivedBanner, setArchivedBanner] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchProducts(); }, []);
@@ -65,6 +68,7 @@ export function ProductCatalog() {
       .from("products")
       .select("*")
       .eq("organization_id", orgId)
+      .neq("status", "archived")
       .order("created_at", { ascending: false });
     if (error) setFetchError(error.message);
     else setProducts((data ?? []) as Product[]);
@@ -132,18 +136,22 @@ export function ProductCatalog() {
     setSaving(false);
   }
 
-  async function handleDelete(id: string) {
-    if (!supabase) return;
+  async function handleArchive() {
+    const id = archiveTarget;
+    if (!id || !supabase) return;
     const product = products.find(p => p.id === id);
     if (!product) return;
-    setDeletingId(id);
-    await supabase
-      .from("products")
-      .delete()
+    setArchiving(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from("products") as any)
+      .update({ status: "archived" })
       .eq("id", id)
       .eq("organization_id", product.organization_id);
     setProducts(prev => prev.filter(p => p.id !== id));
-    setDeletingId(null);
+    setArchiveTarget(null);
+    setArchiving(false);
+    setArchivedBanner(true);
+    setTimeout(() => setArchivedBanner(false), 4000);
   }
 
   const filtered = products.filter(p =>
@@ -190,6 +198,14 @@ export function ProductCatalog() {
           </button>
         )}
       </div>
+
+      {/* ── Archive success banner ─────────────────────────────────── */}
+      {archivedBanner && (
+        <div className="flex items-center gap-3 bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          Product archived successfully.
+        </div>
+      )}
 
       {/* ── Error banner ───────────────────────────────────────────── */}
       {fetchError && (
@@ -302,14 +318,11 @@ export function ProductCatalog() {
                   </td>
                   <td className="px-5 py-4">
                     <button
-                      onClick={() => handleDelete(product.id)}
-                      disabled={deletingId === product.id}
-                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
-                      title="Delete product"
+                      onClick={() => setArchiveTarget(product.id)}
+                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+                      title="Archive product"
                     >
-                      {deletingId === product.id
-                        ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        : <Trash2 className="w-3.5 h-3.5" />}
+                      <Archive className="w-3.5 h-3.5" />
                     </button>
                   </td>
                 </tr>
@@ -320,6 +333,40 @@ export function ProductCatalog() {
       </div>
 
       {/* ── Create Product Modal ────────────────────────────────────── */}
+      {/* ── Archive confirmation modal ──────────────────────────────── */}
+      {archiveTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in fade-in zoom-in-95 duration-200 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                <Archive className="w-5 h-5 text-amber-600" />
+              </div>
+              <h2 className="text-base font-semibold text-foreground">Archive Product?</h2>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+              It will be hidden from your catalog but retained in the database for compliance audits.
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setArchiveTarget(null)}
+                disabled={archiving}
+                className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleArchive}
+                disabled={archiving}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50"
+              >
+                {archiving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                {archiving ? "Archiving…" : "Archive Product"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
