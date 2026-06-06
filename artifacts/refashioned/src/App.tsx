@@ -8,6 +8,7 @@ import {
 import { supabase } from "./lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
 import LoginScreen from "./LoginScreen";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
 const Traceability = lazy(() => import("./pages/Traceability").then(m => ({ default: m.Traceability })));
@@ -184,6 +185,7 @@ export default function App() {
   }
 
   return (
+    <ErrorBoundary>
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
 
       {/* ── Sidebar ─────────────────────────────────────────────── */}
@@ -306,5 +308,6 @@ export default function App() {
       </main>
 
     </div>
+    </ErrorBoundary>
   );
 }
