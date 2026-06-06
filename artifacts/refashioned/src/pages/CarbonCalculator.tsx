@@ -5,6 +5,7 @@ import {
   Zap, Save, PackagePlus,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { useOrg } from "../lib/api/useOrg";
 import {
   BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ComposedChart, Line, ReferenceLine, Cell,
@@ -27,6 +28,9 @@ const MATERIAL_FACTORS: Record<string, { label: string; factor: number; note: st
 };
 
 export function CarbonCalculator() {
+  const { data: org } = useOrg();
+  const isStarterPlan = (org?.plan ?? "starter") === "starter";
+
   // ── Stage calculator state ───────────────────────────────────────────────────
   const [calcMaterial, setCalcMaterial] = useState<string>("organic_cotton");
   const [calcWeight, setCalcWeight]     = useState<string>("1.0");
@@ -613,6 +617,17 @@ export function CarbonCalculator() {
               </p>
             </div>
 
+            {/* Paywall banner */}
+            {isStarterPlan && (
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 leading-snug">
+                  <strong>Growth plan required.</strong> Upgrade to the Growth plan to save Carbon calculations directly to your products.{" "}
+                  <a href="/settings/billing" className="underline font-semibold hover:no-underline">Upgrade now →</a>
+                </p>
+              </div>
+            )}
+
             {/* Error / success feedback */}
             {saveError && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
@@ -630,7 +645,7 @@ export function CarbonCalculator() {
             {/* Save button */}
             <button
               onClick={handleSaveStage}
-              disabled={saving || liveProducts.length === 0 || calcCo2 <= 0}
+              disabled={saving || liveProducts.length === 0 || calcCo2 <= 0 || isStarterPlan}
               className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2.5 rounded-md text-sm font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving

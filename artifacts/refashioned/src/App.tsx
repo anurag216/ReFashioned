@@ -3,7 +3,7 @@ import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
   Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
-  Users, Calculator, Globe, LogOut, Package,
+  Users, Calculator, Globe, LogOut, Package, CreditCard,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
@@ -24,6 +24,7 @@ const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ 
 const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ default: m.PublicPassport })));
 const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
 const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })));
+const Billing = lazy(() => import("./pages/Billing").then(m => ({ default: m.Billing })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -87,6 +88,7 @@ const navItems = [
   { path: "/calculator",   label: "Carbon Calculator",        icon: Calculator      },
   { path: "/regulatory",   label: "Regulatory Radar",         icon: Globe           },
   { path: "/settings",     label: "Settings",                 icon: SettingsIcon    },
+  { path: "/settings/billing", label: "Billing",              icon: CreditCard      },
 ];
 
 export default function App() {
@@ -295,6 +297,9 @@ export default function App() {
               </Route>
               <Route path="/profile">
                 <BrandProfile onViewDashboard={() => setLocation("/dashboard")} />
+              </Route>
+              <Route path="/settings/billing">
+                <Billing />
               </Route>
               <Route path="/settings">
                 <SettingsPage />
