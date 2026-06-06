@@ -22,6 +22,7 @@ const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.N
 const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ default: m.ProductCatalog })));
 const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ default: m.PublicPassport })));
 const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
+const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -128,6 +129,15 @@ export default function App() {
       setOrgCheckLoading(false);
     })();
   }, [session]);
+
+  // Public supplier invite route — accessible without authentication
+  if (location.startsWith("/join")) {
+    return (
+      <Suspense fallback={<DarkSpinner fullScreen />}>
+        <Join />
+      </Suspense>
+    );
+  }
 
   // Public DPP route — accessible without authentication
   if (location.startsWith("/p/")) {

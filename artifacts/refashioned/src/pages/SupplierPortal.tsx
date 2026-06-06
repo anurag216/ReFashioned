@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Building, UserCheck, Clock, AlertTriangle, XCircle, RefreshCcw,
   Plus, Search, Send, CheckCircle2, X, MapPin, MoreHorizontal,
-  Link2, MailOpen, Upload, FileBadge,
+  Link2, MailOpen, Upload, FileBadge, Copy,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -11,7 +11,10 @@ export function SupplierPortal() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm, setInviteForm] = useState({ company: "", email: "", tier: "1", message: "" });
-  const [inviteSent, setInviteSent] = useState(false);
+  const [inviteSending, setInviteSending] = useState(false);
+  const [magicLink, setMagicLink]         = useState<string | null>(null);
+  const [linkCopied, setLinkCopied]       = useState(false);
+  const [inviteError, setInviteError]     = useState<string | null>(null);
   const [selectedCerts, setSelectedCerts] = useState<string[]>(["GOTS", "Fair Trade"]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -186,10 +189,46 @@ export function SupplierPortal() {
     setSaving(false);
   }
 
-  const handleSendInvite = () => {
-    setInviteSent(true);
-    setTimeout(() => { setShowInviteModal(false); setInviteSent(false); setInviteForm({ company: "", email: "", tier: "1", message: "" }); }, 1800);
-  };
+  function closeInviteModal() {
+    setShowInviteModal(false);
+    setMagicLink(null);
+    setLinkCopied(false);
+    setInviteError(null);
+    setInviteForm({ company: "", email: "", tier: "1", message: "" });
+  }
+
+  async function handleSendInvite() {
+    if (!supabase || !inviteForm.company.trim() || !inviteForm.email.trim()) return;
+    setInviteSending(true);
+    setInviteError(null);
+    const client = supabase;
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) { setInviteError("Not authenticated."); setInviteSending(false); return; }
+    const { data: member } = await client
+      .from("organization_members")
+      .select("organization_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgId: string | null = (member as any)?.organization_id ?? null;
+    if (!orgId) { setInviteError("No organisation found for your account."); setInviteSending(false); return; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: invite, error: insertError } = await (client.from("supplier_invites") as any)
+      .insert({ organization_id: orgId, supplier_name: inviteForm.company.trim(), email: inviteForm.email.trim() })
+      .select("token")
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (insertError || !(invite as any)?.token) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setInviteError((insertError as any)?.message ?? "Failed to create invite. Please try again.");
+      setInviteSending(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setMagicLink(`${window.location.origin}/join?token=${(invite as any).token}`);
+    setInviteSending(false);
+  }
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -507,11 +546,18 @@ export function SupplierPortal() {
                 <h2 className="text-base font-semibold text-foreground">Invite a Supplier</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">They'll receive an email with a secure link to submit their data</p>
               </div>
-              <button onClick={() => setShowInviteModal(false)} className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={closeInviteModal} className="p-2 hover:bg-muted rounded-md text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
+            {!magicLink ? (
             <div className="p-6 space-y-4">
+              {inviteError && (
+                <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2.5 text-xs">
+                  <XCircle className="w-4 h-4 shrink-0" />
+                  {inviteError}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-foreground mb-1.5">Company name</label>
@@ -585,24 +631,70 @@ export function SupplierPortal() {
                 />
               </div>
             </div>
+            ) : (
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-green-800">Invite created!</p>
+                  <p className="text-xs text-green-700 mt-0.5">Share this link with {inviteForm.company}</p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">Magic Link</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={magicLink ?? ""}
+                    onClick={e => (e.target as HTMLInputElement).select()}
+                    className="flex-1 min-w-0 px-3 py-2 text-xs border border-border rounded-md bg-muted font-mono focus:outline-none cursor-text"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(magicLink ?? "");
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md border border-border hover:bg-muted transition-colors shrink-0"
+                  >
+                    {linkCopied
+                      ? <><CheckCircle2 className="w-4 h-4 text-green-500" /> Copied!</>
+                      : <><Copy className="w-4 h-4" /> Copy</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+            )}
             <div className="px-6 py-4 border-t border-border flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Link2 className="w-3.5 h-3.5" />
-                <span>Secure onboarding link generated on send</span>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowInviteModal(false)} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors font-medium">
-                  Cancel
-                </button>
-                <button
-                  data-testid="button-send-invite"
-                  onClick={handleSendInvite}
-                  disabled={!inviteForm.company || !inviteForm.email || inviteSent}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-md text-sm font-medium transition-all shadow-sm ${inviteSent ? "bg-green-500 text-white" : "bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"}`}
-                >
-                  {inviteSent ? <><CheckCircle2 className="w-4 h-4" /> Sent!</> : <><Send className="w-4 h-4" /> Send Invitation</>}
-                </button>
-              </div>
+              {!magicLink ? (
+                <>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Secure onboarding link generated on send</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={closeInviteModal} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors font-medium">
+                      Cancel
+                    </button>
+                    <button
+                      data-testid="button-send-invite"
+                      onClick={handleSendInvite}
+                      disabled={!inviteForm.company || !inviteForm.email || inviteSending}
+                      className="flex items-center gap-2 px-5 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {inviteSending
+                        ? <><RefreshCcw className="w-4 h-4 animate-spin" /> Generating…</>
+                        : <><Send className="w-4 h-4" /> Send Invitation</>}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-end w-full">
+                  <button onClick={closeInviteModal} className="px-5 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                    Done
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

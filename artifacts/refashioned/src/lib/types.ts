@@ -37,6 +37,16 @@ export interface Product {
   updated_at: string;
 }
 
+export interface SupplierInvite {
+  id: string;
+  organization_id: string;
+  supplier_name: string;
+  email: string;
+  token: string;
+  status: "pending" | "accepted" | "expired";
+  created_at: string;
+}
+
 export interface OrganizationMember {
   id: string;
   organization_id: string;
