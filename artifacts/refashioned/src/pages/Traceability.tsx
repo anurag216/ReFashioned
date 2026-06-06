@@ -1,7 +1,7 @@
 import { useState, useEffect, type ElementType } from "react";
 import {
   AlertTriangle, Leaf, RefreshCw, Scissors, Droplets, Shirt,
-  Package, FileCheck, Download, CheckCircle2, XCircle, Zap, Plus,
+  Package, FileCheck, Download, CheckCircle2, XCircle, Zap, Plus, Paperclip,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -47,7 +47,9 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   const [orgSuppliers, setOrgSuppliers] = useState<{ id: string; name: string }[]>([]);
   const [addForm, setAddForm] = useState({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
   const [saving, setSaving] = useState(false);
+  const [savingLabel, setSavingLabel] = useState("Saving…");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (!supabase) { setProductsLoading(false); return; }
@@ -200,23 +202,49 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
       setSaveError(`No org found for profile_id = ${user.id}`);
       setSaving(false); return;
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orgId = (member as any).organization_id as string;
+
+    // Upload certificate evidence if a file was attached
+    let certificateUrl: string | null = null;
+    if (certificateFile) {
+      setSavingLabel("Uploading evidence…");
+      const filePath = `${orgId}/${Date.now()}_${certificateFile.name}`;
+      const { error: uploadError } = await client.storage
+        .from("compliance_docs")
+        .upload(filePath, certificateFile);
+      if (uploadError) {
+        setSaveError(`Certificate upload failed: ${uploadError.message}`);
+        setSavingLabel("Saving…");
+        setSaving(false);
+        return;
+      }
+      const { data: urlData } = client.storage
+        .from("compliance_docs")
+        .getPublicUrl(filePath);
+      certificateUrl = urlData.publicUrl;
+      setSavingLabel("Saving…");
+    }
+
     const { error: insertError } = await client
       .from("lifecycle_stages")
       .insert({
         product_id:      selectedProduct,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        organization_id: (member as any).organization_id as string,
+        organization_id: orgId,
         stage_name:      addForm.stage_name.trim(),
         subtitle:        addForm.subtitle.trim() || null,
         stage_order:     addForm.stage_order !== "" ? Number(addForm.stage_order) : 0,
         co2_impact_kg:   addForm.co2_impact_kg !== "" ? Number(addForm.co2_impact_kg) : null,
         water_usage_l:   addForm.water_usage_l !== "" ? Number(addForm.water_usage_l) : null,
         supplier_id:     addForm.supplier_id || null,
+        certificate_url: certificateUrl,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
+    setCertificateFile(null);
+    setSavingLabel("Saving…");
     setRefreshKey(k => k + 1);
     setSaving(false);
   }
@@ -450,16 +478,33 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
                     className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Upload Certificate (PDF/Image)</label>
+                <label className="flex items-center gap-2 w-full border border-dashed border-border rounded-md px-3 py-2.5 text-sm cursor-pointer hover:bg-muted/30 transition-colors">
+                  <Paperclip className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  <span className={`truncate ${certificateFile ? "text-foreground" : "text-muted-foreground"}`}>
+                    {certificateFile ? certificateFile.name : "Choose a file…"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    className="sr-only"
+                    onChange={e => setCertificateFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+              </div>
             </div>
             <div className="px-6 py-4 border-t border-border bg-gray-50/50 flex items-center justify-end gap-3">
-              <button onClick={() => setShowAddModal(false)} disabled={saving}
+              <button
+                onClick={() => { setShowAddModal(false); setCertificateFile(null); setSavingLabel("Saving…"); }}
+                disabled={saving}
                 className="px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50">
                 Cancel
               </button>
               <button onClick={handleAddStage} disabled={saving || !addForm.stage_name.trim()}
                 className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm disabled:opacity-50">
                 {saving
-                  ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
+                  ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {savingLabel}</>
                   : "Save Stage"
                 }
               </button>

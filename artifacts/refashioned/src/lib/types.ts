@@ -81,6 +81,7 @@ export interface LifecycleStage {
   water_usage_l: number | null;
   certification: string | null;
   certification_status: "verified" | "pending" | "expired" | null;
+  certificate_url: string | null;
   verified_at: string | null;
   created_at: string;
   updated_at: string;

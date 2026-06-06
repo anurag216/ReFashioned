@@ -6,7 +6,7 @@ import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
   CheckCircle2, ThumbsUp, ThumbsDown, AlertTriangle, Droplets,
-  X, Copy, Check, Globe, EyeOff,
+  X, Copy, Check, Globe, EyeOff, ExternalLink,
 } from "lucide-react";
 
 interface DppStageRow {
@@ -20,6 +20,7 @@ interface DppStageRow {
   certColor: string;
   co2: string;
   water: string;
+  certificateUrl?: string | null;
 }
 
 const DPP_STAGE_ICON_MAP: Record<string, { icon: ElementType }> = {
@@ -82,7 +83,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     async function fetchLiveStages() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const baseQ = (client.from("lifecycle_stages").select(
-        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status, suppliers(name)"
+        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status, certificate_url, suppliers(name)"
       ) as any);
       const q = productId ? baseQ.eq("product_id", productId) : baseQ;
       const { data } = await q.order("stage_order", { ascending: true });
@@ -104,6 +105,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
           certColor,
           co2:   r.co2_impact_kg != null ? `${r.co2_impact_kg} kg CO₂e` : "—",
           water: r.water_usage_l  != null ? `${Number(r.water_usage_l).toLocaleString()} L` : "—",
+          certificateUrl: (r.certificate_url as string | null) ?? null,
         };
       });
       setLiveStages(mapped);
@@ -112,7 +114,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     fetchLiveStages();
   }, [productId]);
 
-  const stages = [
+  const stages: DppStageRow[] = [
     {
       label: "Sourcing",
       icon: Leaf,
@@ -124,6 +126,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       certColor: "bg-green-100 text-green-700 border-green-200",
       co2: "42.3 kg CO₂e",
       water: "1,800 L",
+      certificateUrl: null,
     },
     {
       label: "Spinning",
@@ -136,6 +139,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       certColor: "bg-blue-100 text-blue-700 border-blue-200",
       co2: "18.7 kg CO₂e",
       water: "450 L",
+      certificateUrl: null,
     },
     {
       label: "Logistics",
@@ -148,6 +152,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       certColor: "bg-teal-100 text-teal-700 border-teal-200",
       co2: "5.1 kg CO₂e",
       water: "12 L",
+      certificateUrl: null,
     },
     {
       label: "Use Phase",
@@ -160,6 +165,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       certColor: "bg-purple-100 text-purple-700 border-purple-200",
       co2: "Est. 12.4 kg CO₂e",
       water: "Est. 680 L",
+      certificateUrl: null,
     },
     {
       label: "End of Life",
@@ -172,6 +178,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       certColor: "bg-emerald-100 text-emerald-700 border-emerald-200",
       co2: "–12.1 kg CO₂e (offset)",
       water: "0 L",
+      certificateUrl: null,
     },
   ];
 
@@ -382,10 +389,20 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">{displayStages[activeStage].desc}</p>
-                <div className="mt-4">
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${displayStages[activeStage].certColor}`}>
                     <ShieldCheck className="w-3 h-3" /> {displayStages[activeStage].cert}
                   </span>
+                  {displayStages[activeStage].certificateUrl && (
+                    <a
+                      href={displayStages[activeStage].certificateUrl!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" /> View Certificate
+                    </a>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4 content-start">

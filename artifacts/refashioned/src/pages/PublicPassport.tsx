@@ -4,7 +4,7 @@ import {
   Grid, ScanLine, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
   CheckCircle2, ThumbsUp, ThumbsDown, AlertTriangle, Droplets,
-  PackageSearch,
+  PackageSearch, ExternalLink,
 } from "lucide-react";
 
 interface DppStageRow {
@@ -18,6 +18,7 @@ interface DppStageRow {
   certColor: string;
   co2: string;
   water: string;
+  certificateUrl?: string | null;
 }
 
 const DPP_STAGE_ICON_MAP: Record<string, { icon: ElementType }> = {
@@ -87,7 +88,7 @@ export function PublicPassport({ productId }: { productId: string }) {
     async function fetchStages() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (client.from("lifecycle_stages").select(
-        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status, suppliers(name)"
+        "stage_name, subtitle, location, description, co2_impact_kg, water_usage_l, certification, certification_status, certificate_url, suppliers(name)"
       ) as any)
         .eq("product_id", productId)
         .order("stage_order", { ascending: true });
@@ -110,6 +111,7 @@ export function PublicPassport({ productId }: { productId: string }) {
           certColor,
           co2:   r.co2_impact_kg != null ? `${r.co2_impact_kg} kg CO₂e` : "—",
           water: r.water_usage_l  != null ? `${Number(r.water_usage_l).toLocaleString()} L` : "—",
+          certificateUrl: (r.certificate_url as string | null) ?? null,
         };
       });
       setLiveStages(mapped);
@@ -283,11 +285,23 @@ export function PublicPassport({ productId }: { productId: string }) {
                     </div>
                   </div>
                   <p className="text-sm text-muted-foreground leading-relaxed">{liveStages[activeStage].desc}</p>
-                  {liveStages[activeStage].cert && (
-                    <div className="mt-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${liveStages[activeStage].certColor}`}>
-                        <ShieldCheck className="w-3 h-3" /> {liveStages[activeStage].cert}
-                      </span>
+                  {(liveStages[activeStage].cert || liveStages[activeStage].certificateUrl) && (
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {liveStages[activeStage].cert && (
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${liveStages[activeStage].certColor}`}>
+                          <ShieldCheck className="w-3 h-3" /> {liveStages[activeStage].cert}
+                        </span>
+                      )}
+                      {liveStages[activeStage].certificateUrl && (
+                        <a
+                          href={liveStages[activeStage].certificateUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted transition-colors"
+                        >
+                          <ExternalLink className="w-3 h-3" /> View Certificate
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
