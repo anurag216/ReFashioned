@@ -117,7 +117,7 @@ export function Join() {
               </div>
               <div className="px-8 py-6 space-y-3">
                 <button
-                  onClick={() => navigate("/")}
+                  onClick={() => navigate(`/?inviteToken=${token ?? ""}`)}
                   className="w-full py-3 rounded-xl text-sm font-semibold transition-colors"
                   style={{ background: "#6AE096", color: "#0d2b1e" }}
                 >
@@ -126,7 +126,7 @@ export function Join() {
                 <p className="text-center text-xs text-muted-foreground">
                   Already have an account?{" "}
                   <button
-                    onClick={() => navigate("/")}
+                    onClick={() => navigate(`/?inviteToken=${token ?? ""}`)}
                     className="underline hover:text-foreground transition-colors"
                   >
                     Sign in

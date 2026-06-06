@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "./lib/supabaseClient";
 import { Grid, ArrowLeft } from "lucide-react";
 
@@ -13,6 +13,16 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(true);
+
+  // Capture invite token from URL and persist it so Onboarding can redeem it
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get("inviteToken");
+    if (inviteToken) {
+      localStorage.setItem("refashioned_invite_token", inviteToken);
+      setMode("sign-up");
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

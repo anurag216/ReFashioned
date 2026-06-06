@@ -58,6 +58,33 @@ export function Onboarding({
       return;
     }
 
+    // 4. Redeem invite token if the user arrived via a supplier magic link
+    const savedToken = localStorage.getItem("refashioned_invite_token");
+    if (savedToken) {
+      // Fetch the invite row — best-effort, never blocks onComplete
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: invite } = await (client.from("supplier_invites") as any)
+        .select("organization_id, email")
+        .eq("token", savedToken)
+        .maybeSingle();
+      if (invite) {
+        // Mark invite accepted
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (client.from("supplier_invites") as any)
+          .update({ status: "accepted" })
+          .eq("token", savedToken);
+        // Activate the corresponding supplier row in the inviting brand's org
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (client.from("suppliers") as any)
+          .update({ status: "active" })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .eq("organization_id", (invite as any).organization_id)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .eq("email", (invite as any).email);
+      }
+      localStorage.removeItem("refashioned_invite_token");
+    }
+
     onComplete();
   }
 
