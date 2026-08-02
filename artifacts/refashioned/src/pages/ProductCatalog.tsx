@@ -43,7 +43,7 @@ export function ProductCatalog() {
   const [archiveTarget, setArchiveTarget] = useState<string | null>(null);
   const [archiving, setArchiving]         = useState(false);
   const [archivedBanner, setArchivedBanner] = useState(false);
-  const { canEdit } = usePermissions();
+  const { canEdit, loading: permissionsLoading } = usePermissions();
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (showModal) setTimeout(() => nameRef.current?.focus(), 80); }, [showModal]);
@@ -147,7 +147,7 @@ export function ProductCatalog() {
             {loading ? "Loading…" : `${products.length} product${products.length !== 1 ? "s" : ""} in your catalog`}
           </p>
         </div>
-        {canEdit && (
+        {!permissionsLoading && canEdit && (
           <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 shadow-md hover:shadow-[0_0_20px_hsl(145_65%_50%/0.35)] shrink-0"
@@ -245,7 +245,7 @@ export function ProductCatalog() {
                         ? `Try a different name, SKU, or season.`
                         : "Create your first product to start tracking its lifecycle, certifications, and sustainability data."}
                     </p>
-                    {!search && (
+                    {!search && !permissionsLoading && canEdit && (
                       <button
                         onClick={() => setShowModal(true)}
                         className="mt-1 flex items-center gap-1.5 text-sm font-medium px-4 py-2 rounded-lg transition-all"
@@ -292,8 +292,8 @@ export function ProductCatalog() {
                   <td className="px-5 py-4 hidden lg:table-cell text-xs text-muted-foreground">
                     {new Date(product.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                   </td>
-                  <td className="px-5 py-4">
-                    {canEdit && (
+                  <td className="px-5 py-4 w-12">
+                    {!permissionsLoading && canEdit && (
                       <button
                         onClick={() => setArchiveTarget(product.id)}
                         className="p-1.5 rounded-md text-muted-foreground/40 hover:text-amber-600 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
