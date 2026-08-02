@@ -2,6 +2,7 @@ import { useState, useEffect, type ElementType } from "react";
 import { useSearch } from "wouter";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
+import { logAudit } from "../lib/audit";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
@@ -215,6 +216,11 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     } else {
       setPublishBanner(next);
       setTimeout(() => setPublishBanner(null), 3500);
+      void logAudit({
+        action: next === "published" ? "passport_published" : "passport_unpublished",
+        entity_type: "product",
+        entity_name: productName,
+      });
     }
     setPublishLoading(false);
   }

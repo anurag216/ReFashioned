@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
+import { logAudit } from "../lib/audit";
 
 // Stage name → icon/colour — purely presentational, lives client-side
 const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconColor: string }> = {
@@ -244,6 +245,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
+    void logAudit({ action: "stage_added", entity_type: "lifecycle_stage", entity_name: addForm.stage_name.trim() });
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
     setCertificateFile(null);

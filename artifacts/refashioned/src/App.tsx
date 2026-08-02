@@ -3,7 +3,7 @@ import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
   Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
-  Users, Calculator, Globe, LogOut, Package, CreditCard,
+  Users, Calculator, Globe, LogOut, Package, CreditCard, ScrollText,
 } from "lucide-react";
 import { supabase } from "./lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
@@ -25,6 +25,7 @@ const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ 
 const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
 const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })));
 const Billing = lazy(() => import("./pages/Billing").then(m => ({ default: m.Billing })));
+const AuditLogPage = lazy(() => import("./pages/AuditLog").then(m => ({ default: m.AuditLogPage })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -89,6 +90,7 @@ const navItems = [
   { path: "/regulatory",   label: "Regulatory Radar",         icon: Globe           },
   { path: "/settings",     label: "Settings",                 icon: SettingsIcon    },
   { path: "/settings/billing", label: "Billing",              icon: CreditCard      },
+  { path: "/audit",        label: "Audit Trail",              icon: ScrollText      },
 ];
 
 export default function App() {
@@ -303,6 +305,9 @@ export default function App() {
               </Route>
               <Route path="/settings">
                 <SettingsPage />
+              </Route>
+              <Route path="/audit">
+                <AuditLogPage />
               </Route>
               <Route>
                 <NotFound />

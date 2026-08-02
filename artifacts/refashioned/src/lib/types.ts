@@ -204,6 +204,18 @@ export type Database = {
   };
 };
 
+export interface AuditLog {
+  id: string;
+  organization_id: string;
+  profile_id: string;
+  action: string;
+  entity_type: string;
+  entity_name: string;
+  created_at: string;
+}
+
+export type AuditLogInsert = Omit<AuditLog, "id" | "created_at">;
+
 // ─── Convenience re-exports ───────────────────────────────────────────────────
 // Import from here rather than from @supabase/supabase-js directly.
 
