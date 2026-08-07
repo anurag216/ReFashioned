@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { logAudit } from "../lib/audit";
 import { useQueryClient } from "@tanstack/react-query";
+import { useOrg } from "../lib/api/useOrg";
 import { useProducts } from "../lib/api/useProducts";
 
 type ProductStatus = "draft" | "in_review" | "published" | "archived";
@@ -33,6 +34,8 @@ const EMPTY_FORM: FormState = { name: "", sku: "", season: "", status: "draft" }
 
 export function ProductCatalog() {
   const { data: products = [], isLoading: loading, error: fetchErrorObj } = useProducts();
+  const { data: org } = useOrg();
+  const orgId = org?.id ?? null;
   const queryClient = useQueryClient();
   const fetchError = fetchErrorObj instanceof Error ? fetchErrorObj.message : null;
   const [search, setSearch]         = useState("");
@@ -105,7 +108,7 @@ export function ProductCatalog() {
 
     setShowModal(false);
     setForm(EMPTY_FORM);
-    void queryClient.invalidateQueries({ queryKey: ["products"] });
+    void queryClient.invalidateQueries({ queryKey: ["products", orgId] });
     setSaving(false);
   }
 
@@ -120,7 +123,7 @@ export function ProductCatalog() {
       .update({ status: "archived" })
       .eq("id", id)
       .eq("organization_id", product.organization_id);
-    void queryClient.invalidateQueries({ queryKey: ["products"] });
+    void queryClient.invalidateQueries({ queryKey: ["products", product.organization_id] });
     void logAudit({ action: "archived", entity_type: "product", entity_name: product.name });
     setArchiveTarget(null);
     setArchiving(false);
@@ -188,7 +191,7 @@ export function ProductCatalog() {
         <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{fetchError}</span>
-          <button onClick={() => void queryClient.invalidateQueries({ queryKey: ["products"] })} className="ml-auto flex items-center gap-1 text-xs font-medium hover:underline">
+          <button onClick={() => void queryClient.invalidateQueries({ queryKey: ["products", orgId] })} className="ml-auto flex items-center gap-1 text-xs font-medium hover:underline">
             <RefreshCw className="w-3 h-3" /> Retry
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, type ElementType } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 import {
   Grid, ScanLine, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
@@ -293,14 +294,7 @@ export function PublicPassport({ productId }: { productId: string }) {
                         </span>
                       )}
                       {liveStages[activeStage].certificateUrl && (
-                        <a
-                          href={liveStages[activeStage].certificateUrl!}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted transition-colors"
-                        >
-                          <ExternalLink className="w-3 h-3" /> View Certificate
-                        </a>
+                        <SecureDocumentLink path={liveStages[activeStage].certificateUrl} />
                       )}
                     </div>
                   )}

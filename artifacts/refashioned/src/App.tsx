@@ -5,6 +5,7 @@ import {
   Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
   Users, Calculator, Globe, LogOut, Package, CreditCard, ScrollText,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
 import LoginScreen from "./LoginScreen";
@@ -94,11 +95,18 @@ const navItems = [
 ];
 
 export default function App() {
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [orgCheckLoading, setOrgCheckLoading] = useState(true);
   const [hasOrg, setHasOrg] = useState(false);
   const [location, setLocation] = useLocation();
+
+  async function handleSignOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    queryClient.clear();
+  }
 
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); return; }
@@ -239,7 +247,7 @@ export default function App() {
               <p className="text-xs text-sidebar-foreground/60 truncate">Signed in</p>
             </div>
             <button
-              onClick={() => supabase?.auth.signOut()}
+              onClick={() => { void handleSignOut(); }}
               title="Sign out"
               className="shrink-0 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
             >
