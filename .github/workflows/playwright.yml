@@ -1,19 +1,19 @@
-name: Playwright Live E2E
+name: Validation and Playwright Live E2E
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
 
-jobs:
-  playwright-live-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      PLAYWRIGHT_BASE_URL: https://re-fashioned--anuragncu.replit.app
-      PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
-      PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+permissions:
+  contents: read
 
+jobs:
+  validate:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,19 +21,74 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.28.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check tracked authentication secrets
+        run: pnpm security:secrets
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test
+
+      - name: Build production bundles
+        run: pnpm build
+
+  playwright-live-e2e:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+      PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
+      PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check live E2E configuration
+        id: e2e-config
+        shell: bash
+        run: |
+          if [[ -n "$PLAYWRIGHT_BASE_URL" && -n "$PLAYWRIGHT_ADMIN_EMAIL" && -n "$PLAYWRIGHT_ADMIN_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Required live E2E secrets are unavailable; authenticated tests will be skipped."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup pnpm
+        if: steps.e2e-config.outputs.available == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+
+      - name: Setup Node.js
+        if: steps.e2e-config.outputs.available == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.e2e-config.outputs.available == 'true'
+        run: pnpm install --frozen-lockfile
+
       - name: Install Playwright browser
+        if: steps.e2e-config.outputs.available == 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright suite
-        run: npm run test:e2e
+        if: steps.e2e-config.outputs.available == 'true'
+        run: pnpm test:e2e
