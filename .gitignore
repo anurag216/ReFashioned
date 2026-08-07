@@ -27,10 +27,39 @@ node_modules
 !.vscode/launch.json
 !.vscode/extensions.json
 
+# local configuration (examples are safe to commit)
+.env
+.env.*
+!.env.example
+
+# test and coverage output
+coverage/
+**/coverage/
+test-results/
+**/test-results/
+playwright-report/
+**/playwright-report/
+blob-report/
+**/blob-report/
+**/playwright/.auth/
+**/.auth/
+**/*storage-state*.json
+**/*storageState*.json
+*.trace.zip
+trace.zip
+*.webm
+screenshots/
+**/screenshots/
+videos/
+**/videos/
+
+# local Supabase state
+supabase/.branches/
+supabase/.temp/
+
 # misc
 /.sass-cache
 /connect.lock
-/coverage
 /libpeerconnection.log
 npm-debug.log
 yarn-error.log

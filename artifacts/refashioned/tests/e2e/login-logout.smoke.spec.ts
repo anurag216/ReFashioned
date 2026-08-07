@@ -1,13 +1,12 @@
 import { expect, test } from "@playwright/test";
-
-const ADMIN_EMAIL = process.env.PLAYWRIGHT_ADMIN_EMAIL ?? "rockerarvi@gmail.com";
-const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD ?? "Playwrighttest@123";
+import { requirePlaywrightAuthEnvironment } from "./authEnvironment";
 
 test("login and logout lifecycle completes cleanly", async ({ page }) => {
+  const { adminEmail, adminPassword } = requirePlaywrightAuthEnvironment();
   await page.goto("/");
 
-  await page.getByPlaceholder("you@company.com").fill(ADMIN_EMAIL);
-  await page.getByPlaceholder("••••••••").fill(ADMIN_PASSWORD);
+  await page.getByPlaceholder("you@company.com").fill(adminEmail);
+  await page.getByPlaceholder("••••••••").fill(adminPassword);
   await page.getByRole("button", { name: /sign in/i }).click();
 
   await page.waitForURL("**/dashboard", { timeout: 30_000 });

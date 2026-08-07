@@ -13,7 +13,7 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   use: {
-    baseURL: "https://re-fashioned--anuragncu.replit.app",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
