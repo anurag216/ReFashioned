@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { logAudit } from "../lib/audit";
 import { QRCodeSVG } from "qrcode.react";
+import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 import {
   ArrowLeft, Grid, ScanLine, Share, FileCheck, ShieldCheck,
   Leaf, RefreshCw, Package, Shirt, Recycle, MapPin,
@@ -402,14 +403,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
                     <ShieldCheck className="w-3 h-3" /> {displayStages[activeStage].cert}
                   </span>
                   {displayStages[activeStage].certificateUrl && (
-                    <a
-                      href={displayStages[activeStage].certificateUrl!}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted transition-colors"
-                    >
-                      <ExternalLink className="w-3 h-3" /> View Certificate
-                    </a>
+                    <SecureDocumentLink path={displayStages[activeStage].certificateUrl} />
                   )}
                 </div>
               </div>

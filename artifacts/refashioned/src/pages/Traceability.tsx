@@ -6,6 +6,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { logAudit } from "../lib/audit";
+import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 
 // Stage name → icon/colour — purely presentational, lives client-side
 const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconColor: string }> = {
@@ -210,7 +211,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     const orgId = (member as any).organization_id as string;
 
     // Upload certificate evidence if a file was attached
-    let certificateUrl: string | null = null;
+    let certificatePath: string | null = null;
     if (certificateFile) {
       setSavingLabel("Uploading evidence…");
       const filePath = `${orgId}/${Date.now()}_${certificateFile.name}`;
@@ -223,10 +224,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         setSaving(false);
         return;
       }
-      const { data: urlData } = client.storage
-        .from("compliance_docs")
-        .getPublicUrl(filePath);
-      certificateUrl = urlData.publicUrl;
+      certificatePath = filePath;
       setSavingLabel("Saving…");
     }
 
@@ -241,7 +239,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         co2_impact_kg:   addForm.co2_impact_kg !== "" ? Number(addForm.co2_impact_kg) : null,
         water_usage_l:   addForm.water_usage_l !== "" ? Number(addForm.water_usage_l) : null,
         supplier_id:     addForm.supplier_id || null,
-        certificate_url: certificateUrl,
+        certificate_url: certificatePath,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }

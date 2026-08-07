@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../supabaseClient";
+import { useOrg } from "./useOrg";
 
 export type SupplierStatus = "active" | "needs-action" | "pending" | "invited" | "not-invited";
 
@@ -16,27 +17,13 @@ export type SupplierRow = {
   lastActivity: string;
 };
 
-async function fetchSuppliers(): Promise<SupplierRow[]> {
-  if (!supabase) {
+async function fetchSuppliers(orgId: string | null): Promise<SupplierRow[]> {
+  if (!supabase || !orgId) {
     throw new Error(
       "Supabase credentials not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Replit Secrets."
     );
   }
   const client = supabase;
-
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) return [];
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: memberRow } = await (client
-    .from("organization_members")
-    .select("organization_id")
-    .eq("profile_id", user.id)
-    .limit(1)
-    .maybeSingle() as any);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orgId: string | null = (memberRow as any)?.organization_id ?? null;
-  if (!orgId) return [];
 
   const { data, error } = await client
     .from("suppliers")
@@ -61,8 +48,12 @@ async function fetchSuppliers(): Promise<SupplierRow[]> {
 }
 
 export function useSuppliers() {
+  const { data: org } = useOrg();
+  const orgId = org?.id ?? null;
+
   return useQuery<SupplierRow[]>({
-    queryKey: ["suppliers"],
-    queryFn: fetchSuppliers,
+    queryKey: ["suppliers", orgId],
+    enabled: !!orgId,
+    queryFn: ({ queryKey }) => fetchSuppliers((queryKey[1] as string | null) ?? null),
   });
 }

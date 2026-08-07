@@ -1,24 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../supabaseClient";
 import type { Product } from "../types";
+import { useOrg } from "./useOrg";
 
-async function fetchProducts(): Promise<Product[]> {
-  if (!supabase) return [];
+async function fetchProducts(orgId: string | null): Promise<Product[]> {
+  if (!supabase || !orgId) return [];
   const client = supabase;
-
-  const { data: { user } } = await client.auth.getUser();
-  if (!user) return [];
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: member } = await (client
-    .from("organization_members")
-    .select("organization_id")
-    .eq("profile_id", user.id)
-    .limit(1)
-    .maybeSingle() as any);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orgId: string | null = (member as any)?.organization_id ?? null;
-  if (!orgId) return [];
 
   const { data, error } = await client
     .from("products")
@@ -32,8 +19,12 @@ async function fetchProducts(): Promise<Product[]> {
 }
 
 export function useProducts() {
+  const { data: org } = useOrg();
+  const orgId = org?.id ?? null;
+
   return useQuery<Product[]>({
-    queryKey: ["products"],
-    queryFn: fetchProducts,
+    queryKey: ["products", orgId],
+    enabled: !!orgId,
+    queryFn: ({ queryKey }) => fetchProducts((queryKey[1] as string | null) ?? null),
   });
 }
