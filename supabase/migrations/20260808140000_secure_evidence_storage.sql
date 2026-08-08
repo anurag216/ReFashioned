@@ -248,7 +248,15 @@ GRANT EXECUTE ON FUNCTION public.current_actor_can_upload_evidence(uuid) TO auth
 CREATE OR REPLACE FUNCTION public.create_evidence_upload_intent(p_lifecycle_stage_id uuid,p_document_type text,p_original_filename text,p_mime_type text,p_size_bytes bigint)
 RETURNS TABLE(evidence_id uuid,bucket_id text,storage_path text,upload_expires_at timestamptz)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,extensions AS $$
-DECLARE v_actor uuid:=auth.uid(); v_stage record; v_id uuid:=extensions.gen_random_uuid(); v_ext text; v_path text; v_exp timestamptz:=now()+interval '15 minutes'; v_resub boolean;
+DECLARE
+ v_actor uuid:=auth.uid();
+ v_stage record;
+ v_id uuid:=extensions.gen_random_uuid();
+ v_ext text;
+ v_extension_pattern text;
+ v_path text;
+ v_exp timestamptz:=now()+interval '15 minutes';
+ v_resub boolean;
 BEGIN
  IF v_actor IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
  SELECT s.organization_id,s.supplier_id,p.status INTO v_stage FROM public.lifecycle_stages s JOIN public.products p ON p.id=s.product_id WHERE s.id=p_lifecycle_stage_id;
@@ -258,8 +266,21 @@ BEGIN
  IF NOT public.current_actor_can_upload_evidence(p_lifecycle_stage_id) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
  IF p_document_type IS NULL OR p_document_type NOT IN ('certificate','test_report','material_declaration','invoice','other') THEN RAISE EXCEPTION 'invalid document type'; END IF;
  IF p_original_filename IS NULL OR length(btrim(p_original_filename))=0 OR length(p_original_filename)>255 OR p_original_filename ~ '[/\\[:cntrl:]]' THEN RAISE EXCEPTION 'invalid filename'; END IF;
- v_ext:=CASE p_mime_type WHEN 'application/pdf' THEN 'pdf' WHEN 'image/png' THEN 'png' WHEN 'image/jpeg' THEN 'jpg' END;
- IF v_ext IS NULL OR lower(p_original_filename) !~ CASE v_ext WHEN 'jpg' THEN '\.(jpg|jpeg)$' ELSE '\.'||v_ext||'$' END THEN RAISE EXCEPTION 'filename extension and MIME type must agree'; END IF;
+ v_ext:=CASE p_mime_type
+  WHEN 'application/pdf' THEN 'pdf'
+  WHEN 'image/png' THEN 'png'
+  WHEN 'image/jpeg' THEN 'jpg'
+ END;
+ IF v_ext IS NULL THEN
+  RAISE EXCEPTION 'filename extension and MIME type must agree';
+ END IF;
+ v_extension_pattern:=CASE v_ext
+  WHEN 'jpg' THEN E'\\.(jpg|jpeg)$'
+  ELSE E'\\.'||v_ext||'$'
+ END;
+ IF lower(p_original_filename) !~ v_extension_pattern THEN
+  RAISE EXCEPTION 'filename extension and MIME type must agree';
+ END IF;
  IF p_size_bytes IS NULL OR p_size_bytes NOT BETWEEN 1 AND 10485760 THEN RAISE EXCEPTION 'file size must be between 1 byte and 10 MiB'; END IF;
  v_path:='evidence/'||v_id||'/'||encode(extensions.gen_random_bytes(32),'hex')||'.'||v_ext;
  SELECT EXISTS(SELECT 1 FROM public.evidence_uploads WHERE lifecycle_stage_id=p_lifecycle_stage_id AND status='rejected')
