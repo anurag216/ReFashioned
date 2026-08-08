@@ -44,6 +44,40 @@ jobs:
       - name: Build production bundles
         run: pnpm build
 
+  supabase-database:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.39.2
+
+      - name: Start local Supabase
+        run: supabase start
+
+      - name: Apply all migrations from a clean database
+        run: supabase db reset
+
+      - name: Verify generated database types are current
+        run: |
+          supabase gen types typescript --local > /tmp/database.types.ts
+          diff -u artifacts/refashioned/src/lib/database.types.ts /tmp/database.types.ts
+
+      - name: Lint database schema
+        run: supabase db lint --local --level warning
+
+      - name: Run pgTAP authorization tests
+        run: supabase test db
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup || true
+
   playwright-live-e2e:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

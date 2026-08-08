@@ -89,7 +89,7 @@ export function Billing() {
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [upgraded, setUpgraded]       = useState(false);
 
-  const currentPlan: PlanId = org?.plan ?? "starter";
+  const currentPlan: PlanId = org?.plan === "growth" || org?.plan === "enterprise" ? org.plan : "starter";
   const orgId = org?.id ?? null;
 
   async function handleUpgradeGrowth() {

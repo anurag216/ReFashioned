@@ -64,7 +64,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/tests/setup.ts",
     css: true,
-    include: ["src/tests/unit/**/*.test.ts", "src/tests/components/**/*.test.tsx"],
+    include: ["src/tests/unit/**/*.test.{ts,tsx}", "src/tests/components/**/*.test.tsx"],
     exclude: ["playwright/**", "**/node_modules/**"],
   },
 });

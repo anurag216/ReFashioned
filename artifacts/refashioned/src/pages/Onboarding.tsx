@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Grid } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
+import { currentMembershipQueryKey } from "../lib/auth/useCurrentMembership";
 
 export function Onboarding({
   session,
@@ -13,6 +15,7 @@ export function Onboarding({
   const [brandName, setBrandName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,69 +24,30 @@ export function Onboarding({
     setError(null);
     const client = supabase;
 
-    // 1. Upsert profile row
-    const { error: profileErr } = await (client.from("profiles") as any).upsert({
-      id: session.user.id,
-      email: session.user.email,
-    });
-    if (profileErr) {
-      setError(profileErr.message);
-      setSaving(false);
-      return;
-    }
-
-    // 2. Create organization
-    const { data: newOrg, error: orgErr } = await (client.from("organizations") as any)
-      .insert({ name: brandName.trim(), plan: "starter" })
-      .select()
-      .single();
-    if (orgErr) {
-      setError(orgErr.message);
-      setSaving(false);
-      return;
-    }
-
-    // 3. Create admin membership
-    const { error: memberErr } = await client
-      .from("organization_members")
-      .insert({
-        profile_id: session.user.id,
-        organization_id: newOrg.id,
-        role: "admin",
-        joined_at: new Date().toISOString(),
-      } as any);
-    if (memberErr) {
-      setError(memberErr.message);
-      setSaving(false);
-      return;
-    }
-
-    // 4. Redeem invite token if the user arrived via a supplier magic link
+    // Supplier invitation redemption requires a dedicated, token-verifying RPC.
+    // Do not create an unrelated brand organization for invited suppliers.
     const savedToken = localStorage.getItem("refashioned_invite_token");
     if (savedToken) {
-      // Fetch the invite row — best-effort, never blocks onComplete
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: invite } = await (client.from("supplier_invites") as any)
-        .select("organization_id, email")
-        .eq("token", savedToken)
-        .maybeSingle();
-      if (invite) {
-        // Mark invite accepted
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (client.from("supplier_invites") as any)
-          .update({ status: "accepted" })
-          .eq("token", savedToken);
-        // Activate the corresponding supplier row in the inviting brand's org
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (client.from("suppliers") as any)
-          .update({ status: "active" })
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .eq("organization_id", (invite as any).organization_id)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .eq("email", (invite as any).email);
-      }
-      localStorage.removeItem("refashioned_invite_token");
+      // TODO: redeem through the dedicated supplier-invitation flow.
+      setError("Supplier invitations are not available in onboarding yet. Please contact your administrator.");
+      setSaving(false);
+      return;
     }
+
+    const { error: rpcError } = await client.rpc<
+      "create_organization_with_admin",
+      { organization_name: string }
+    >("create_organization_with_admin", {
+      organization_name: brandName.trim(),
+    });
+    if (rpcError) {
+      setError("We couldn't create your organization. Please try again or contact support.");
+      setSaving(false);
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: currentMembershipQueryKey(session.user.id) });
+    await queryClient.invalidateQueries({ queryKey: ["org"] });
 
     onComplete();
   }

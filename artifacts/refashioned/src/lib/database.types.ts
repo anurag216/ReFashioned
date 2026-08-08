@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -457,23 +452,23 @@ export type Database = {
         Row: {
           id: string
           joined_at: string | null
-          organization_id: string | null
-          profile_id: string | null
-          role: string | null
+          organization_id: string
+          profile_id: string
+          role: string
         }
         Insert: {
           id?: string
           joined_at?: string | null
-          organization_id?: string | null
-          profile_id?: string | null
-          role?: string | null
+          organization_id: string
+          profile_id: string
+          role: string
         }
         Update: {
           id?: string
           joined_at?: string | null
-          organization_id?: string | null
-          profile_id?: string | null
-          role?: string | null
+          organization_id?: string
+          profile_id?: string
+          role?: string
         }
         Relationships: [
           {
@@ -486,7 +481,7 @@ export type Database = {
           {
             foreignKeyName: "organization_members_profile_id_fkey"
             columns: ["profile_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -784,7 +779,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      get_auth_user_orgs: { Args: never; Returns: string[] }
+      create_organization_with_admin: {
+        Args: { organization_name: string }
+        Returns: string
+      }
+      has_org_role: {
+        Args: { allowed_roles: string[]; target_organization_id: string }
+        Returns: boolean
+      }
+      is_org_member: {
+        Args: { target_organization_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
@@ -920,3 +926,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

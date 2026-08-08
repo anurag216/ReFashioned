@@ -25,12 +25,7 @@ export function LogStagePanel({ calcCo2 }: Props) {
     if (!supabase) return;
     const client = supabase;
     async function load() {
-      const { data: { user } } = await client.auth.getUser();
-      if (!user) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orgId: string | null = (member as any)?.organization_id ?? null;
+      const orgId = org?.id ?? null;
       if (!orgId) return;
       const [prodRes, supRes] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,7 +40,7 @@ export function LogStagePanel({ calcCo2 }: Props) {
       if (prods.length > 0) setCalcProductId(prods[0].id);
     }
     load();
-  }, []);
+  }, [org?.id]);
 
   async function handleSaveStage() {
     if (!supabase) return;
@@ -55,12 +50,7 @@ export function LogStagePanel({ calcCo2 }: Props) {
     setSaving(true); setSaveError(null); setSaveSuccess(false);
     const client = supabase;
     try {
-      const { data: { user } } = await client.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orgId: string | null = (member as any)?.organization_id ?? null;
+      const orgId = org?.id ?? null;
       if (!orgId) throw new Error("No organisation found");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: existing } = await (client.from("lifecycle_stages").select("stage_order").eq("product_id", calcProductId).order("stage_order", { ascending: false }).limit(1).maybeSingle() as any);
