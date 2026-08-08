@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "../supabaseClient";
 import type { Organization } from "../types";
 import { useCurrentMembership } from "../auth/useCurrentMembership";
+import { useAuthUserId } from "../auth/AuthUserContext";
 
 async function fetchOrg(orgId: string | null): Promise<Organization | null> {
   if (!supabase) return null;
@@ -19,7 +20,8 @@ async function fetchOrg(orgId: string | null): Promise<Organization | null> {
 }
 
 export function useOrg() {
-  const membership = useCurrentMembership();
+  const userId = useAuthUserId();
+  const membership = useCurrentMembership(userId);
   const orgId = membership.data?.organization_id ?? null;
   return useQuery<Organization | null>({
     queryKey: ["org", orgId],

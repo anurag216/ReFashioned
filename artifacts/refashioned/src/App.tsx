@@ -12,6 +12,7 @@ import LoginScreen from "./LoginScreen";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { useCurrentMembership } from "./lib/auth/useCurrentMembership";
 import { useOrg } from "./lib/api/useOrg";
+import { AuthUserProvider } from "./lib/auth/AuthUserContext";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
 const Traceability = lazy(() => import("./pages/Traceability").then(m => ({ default: m.Traceability })));
@@ -83,7 +84,7 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [location, setLocation] = useLocation();
-  const membership = useCurrentMembership(Boolean(session));
+  const membership = useCurrentMembership(session?.user.id ?? null);
 
   async function handleSignOut() {
     if (!supabase) return;
@@ -97,11 +98,12 @@ export default function App() {
       setSession(session);
       setAuthLoading(false);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT") queryClient.clear();
       setSession(session);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [queryClient]);
 
   // Public supplier invite route — accessible without authentication
   if (location.startsWith("/join")) {
@@ -162,13 +164,16 @@ export default function App() {
   // DPP is a full-screen public-style view — rendered outside the app shell
   if (location === "/passport") {
     return (
-      <Suspense fallback={<DarkSpinner fullScreen />}>
-        <DigitalProductPassport onBack={() => setLocation("/traceability")} />
-      </Suspense>
+      <AuthUserProvider userId={session.user.id}>
+        <Suspense fallback={<DarkSpinner fullScreen />}>
+          <DigitalProductPassport onBack={() => setLocation("/traceability")} />
+        </Suspense>
+      </AuthUserProvider>
     );
   }
 
   return (
+    <AuthUserProvider userId={session.user.id}>
     <ErrorBoundary>
     <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
 
@@ -299,5 +304,6 @@ export default function App() {
 
     </div>
     </ErrorBoundary>
+    </AuthUserProvider>
   );
 }

@@ -46,7 +46,7 @@ export function Onboarding({
       return;
     }
 
-    await queryClient.invalidateQueries({ queryKey: currentMembershipQueryKey });
+    await queryClient.invalidateQueries({ queryKey: currentMembershipQueryKey(session.user.id) });
     await queryClient.invalidateQueries({ queryKey: ["org"] });
 
     onComplete();

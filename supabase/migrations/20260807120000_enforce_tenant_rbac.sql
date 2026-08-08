@@ -111,6 +111,11 @@ BEGIN
   END IF;
 
   PERFORM 1 FROM public.organizations WHERE id = OLD.organization_id FOR UPDATE;
+  -- A parent DELETE removes the organization before its FK cascade fires. In
+  -- that one case there is no tenant whose final-admin invariant can protect.
+  IF TG_OP = 'DELETE' AND NOT FOUND THEN
+    RETURN OLD;
+  END IF;
 
   IF OLD.role = 'admin' AND (TG_OP = 'DELETE' OR NEW.role <> 'admin') AND NOT EXISTS (
     SELECT 1 FROM public.organization_members

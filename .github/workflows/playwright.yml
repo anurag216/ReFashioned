@@ -76,7 +76,7 @@ jobs:
 
       - name: Stop local Supabase
         if: always()
-        run: supabase stop --no-backup
+        run: supabase stop --no-backup || true
 
   playwright-live-e2e:
     if: github.event_name == 'push'

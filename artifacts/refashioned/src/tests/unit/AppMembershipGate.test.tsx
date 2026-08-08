@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 import App from "../../App";
 
-const { useCurrentMembership, session } = vi.hoisted(() => ({
+const { useCurrentMembership, session, authCallbacks } = vi.hoisted(() => ({
   useCurrentMembership: vi.fn(),
   session: { user: { id: "user-a", email: "user@example.test" } } as Session,
+  authCallbacks: { change: undefined as undefined | ((event: string, session: Session | null) => void) },
 }));
 
 vi.mock("../../lib/auth/useCurrentMembership", () => ({ useCurrentMembership }));
@@ -17,18 +18,22 @@ vi.mock("../../lib/supabaseClient", () => ({
   supabase: {
     auth: {
       getSession: vi.fn().mockResolvedValue({ data: { session } }),
-      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+      onAuthStateChange: vi.fn((callback) => {
+        authCallbacks.change = callback;
+        return { data: { subscription: { unsubscribe: vi.fn() } } };
+      }),
       signOut: vi.fn(),
     },
   },
 }));
 
 function renderApp() {
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
+  const queryClient = new QueryClient();
+  return { queryClient, ...render(
+    <QueryClientProvider client={queryClient}>
       <App />
     </QueryClientProvider>,
-  );
+  ) };
 }
 
 describe("application membership gate", () => {
@@ -37,7 +42,7 @@ describe("application membership gate", () => {
   it("blocks while membership is loading", async () => {
     useCurrentMembership.mockReturnValue({ isLoading: true, data: undefined, error: null });
     renderApp();
-    await waitFor(() => expect(useCurrentMembership).toHaveBeenCalledWith(true));
+    await waitFor(() => expect(useCurrentMembership).toHaveBeenCalledWith("user-a"));
     expect(screen.queryByText(/Complete Setup/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Signed in/i)).not.toBeInTheDocument();
   });
@@ -75,5 +80,31 @@ describe("application membership gate", () => {
     useCurrentMembership.mockReturnValue({ isLoading: false, data: undefined, error: new Error("network") });
     renderApp();
     expect(await screen.findByRole("alert")).toHaveTextContent(/contact support/i);
+  });
+
+  it("cannot enter with User A's cached membership while User B resolves", async () => {
+    useCurrentMembership.mockImplementation((userId: string | null) => userId === "user-a"
+      ? { isLoading: false, data: { id: "member-a", organization_id: "org-a", role: "admin" }, error: null }
+      : { isLoading: true, data: undefined, error: null });
+    renderApp();
+    expect(await screen.findByText("Signed in")).toBeInTheDocument();
+
+    const userB = { user: { id: "user-b", email: "user-b@example.test" } } as Session;
+    act(() => authCallbacks.change?.("SIGNED_IN", userB));
+
+    await waitFor(() => expect(useCurrentMembership).toHaveBeenLastCalledWith("user-b"));
+    expect(screen.queryByText("Signed in")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Complete Setup" })).not.toBeInTheDocument();
+  });
+
+  it("clears auth-scoped query state for non-button sign-outs", async () => {
+    useCurrentMembership.mockReturnValue({ isLoading: false, data: null, error: null });
+    const { queryClient } = renderApp();
+    const clear = vi.spyOn(queryClient, "clear");
+    await waitFor(() => expect(authCallbacks.change).toBeTypeOf("function"));
+
+    act(() => authCallbacks.change?.("SIGNED_OUT", null));
+
+    expect(clear).toHaveBeenCalledOnce();
   });
 });

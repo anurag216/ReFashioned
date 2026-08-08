@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(44);
+SELECT plan(46);
 
 -- Stable fixture identities and tenants. Fixture setup runs as postgres; every
 -- authorization assertion below switches to the real API roles so RLS executes.
@@ -99,6 +99,11 @@ SELECT throws_ok($$DELETE FROM public.organization_members WHERE id='20000000-00
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','owner')$$, 'invalid roles are rejected');
 RESET ROLE;
 
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', true);
+SET LOCAL ROLE authenticated;
+SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','viewer')$$, '23505', 'duplicate key value violates unique constraint "organization_members_profile_id_key"', 'Tenant B admin cannot add a profile that already belongs to Tenant A');
+RESET ROLE;
+
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', true);
 SET LOCAL ROLE authenticated;
 SELECT lives_ok($$SELECT public.create_organization_with_admin(' New Tenant ')$$, 'onboarding RPC succeeds atomically');
@@ -109,6 +114,11 @@ RESET ROLE;
 SET LOCAL ROLE anon;
 SELECT throws_ok($$SELECT public.create_organization_with_admin('Anonymous Tenant')$$, '42501', NULL, 'anonymous cannot execute onboarding RPC');
 RESET ROLE;
+
+SET LOCAL ROLE service_role;
+SELECT lives_ok($$DELETE FROM public.organizations WHERE id='10000000-0000-0000-0000-000000000002'$$, 'service-role organization deletion cascades without final-admin rejection');
+RESET ROLE;
+SELECT is((SELECT count(*) FROM public.organization_members WHERE organization_id='10000000-0000-0000-0000-000000000002'), 0::bigint, 'organization cascade removes its memberships');
 
 SELECT * FROM finish();
 ROLLBACK;

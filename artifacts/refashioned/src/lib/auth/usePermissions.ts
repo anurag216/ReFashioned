@@ -1,5 +1,6 @@
 import { useCurrentMembership } from "./useCurrentMembership";
 import type { OrganizationRole } from "./useCurrentMembership";
+import { useAuthUserId } from "./AuthUserContext";
 
 export interface Permissions {
   role: OrganizationRole | null;
@@ -20,7 +21,7 @@ export function derivePermissions(role: OrganizationRole | null) {
 }
 
 export function usePermissions(): Permissions {
-  const membership = useCurrentMembership();
+  const membership = useCurrentMembership(useAuthUserId());
   return {
     ...derivePermissions(membership.data?.role ?? null),
     loading: membership.isLoading,

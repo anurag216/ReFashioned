@@ -13,17 +13,16 @@ function isOrganizationRole(value: string): value is OrganizationRole {
   return value === "admin" || value === "manager" || value === "viewer";
 }
 
-export const currentMembershipQueryKey = ["current-membership"] as const;
+export const currentMembershipQueryKey = (userId: string | null) =>
+  ["current-membership", userId] as const;
 
-export async function fetchCurrentMembership(): Promise<CurrentMembership | null> {
+export async function fetchCurrentMembership(userId: string): Promise<CurrentMembership | null> {
   if (!supabase) return null;
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
 
   const { data, error } = await supabase
     .from("organization_members")
     .select("id, organization_id, role")
-    .eq("profile_id", user.id);
+    .eq("profile_id", userId);
 
   if (error) throw new Error("Unable to load your organization membership.");
   if (data.length > 1) {
@@ -37,10 +36,10 @@ export async function fetchCurrentMembership(): Promise<CurrentMembership | null
   return { ...membership, role: membership.role };
 }
 
-export function useCurrentMembership(enabled = true) {
+export function useCurrentMembership(userId: string | null) {
   return useQuery({
-    queryKey: currentMembershipQueryKey,
-    queryFn: fetchCurrentMembership,
-    enabled,
+    queryKey: currentMembershipQueryKey(userId),
+    queryFn: () => fetchCurrentMembership(userId!),
+    enabled: userId !== null,
   });
 }
