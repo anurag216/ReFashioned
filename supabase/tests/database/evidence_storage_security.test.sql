@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(24);
+SELECT plan(28);
 
 SELECT ok(EXISTS(SELECT 1 FROM storage.buckets WHERE id='compliance_docs'),'compliance bucket exists');
 SELECT is((SELECT public FROM storage.buckets WHERE id='compliance_docs'),false,'bucket is private');
@@ -26,6 +26,10 @@ SELECT has_function('public','get_my_supplier_evidence_tasks',ARRAY[]::text[],'s
 SELECT ok(NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='lifecycle_stages' AND column_name='certificate_url'),'legacy stage pointer removed');
 SELECT ok(EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.evidence_uploads'::regclass AND conname='evidence_storage_path_key'),'storage paths are unique');
 SELECT ok(EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.evidence_uploads'::regclass AND tgname='validate_evidence_scope_trigger'),'scope and immutability trigger exists');
+SELECT has_function('public','current_actor_can_upload_evidence',ARRAY['uuid'],'upload policy helper accepts only a stage');
+SELECT has_function('public','current_actor_can_read_evidence_object',ARRAY['text','text'],'read policy helper accepts only bucket and path');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('evidence_actor_authorized','can_read_evidence_object')),'arbitrary-actor authorization helpers are absent');
+SELECT throws_ok($$INSERT INTO public.lifecycle_stages(organization_id,product_id,supplier_id,stage_name) VALUES('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000002','cross tenant')$$,'23503',NULL,'cross-tenant supplier is rejected before evidence creation');
 
 SELECT * FROM finish();
 ROLLBACK;

@@ -6,6 +6,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { logAudit } from "../lib/audit";
+import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 
 // Stage name → icon/colour — purely presentational, lives client-side
 const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconColor: string }> = {
@@ -22,6 +23,7 @@ const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconCo
 const DEFAULT_ICON = { icon: Zap, iconBg: "bg-slate-400", iconColor: "text-white" };
 
 interface TraceRow {
+  id: string;
   stage: string;
   subtitle: string;
   icon: ElementType;
@@ -35,7 +37,9 @@ interface TraceRow {
   co2Pos: boolean;
   waterVal: string;
   flagged: boolean;
+  evidence: EvidenceRow[];
 }
+interface EvidenceRow { evidence_id:string; lifecycle_stage_id:string; document_type:string; original_filename:string; evidence_status:string; uploaded_by:string|null; uploaded_at:string|null; reviewed_by:string|null; reviewed_at:string|null; rejection_reason:string|null; certification_id:string|null; certification_name:string|null; certification_status:string|null; certification_expiry:string|null }
 
 export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) => void }) {
   const [products, setProducts] = useState<{ id: string; name: string; sku: string | null }[]>([]);
@@ -53,6 +57,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   const [savingLabel, setSavingLabel] = useState("Saving…");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [createdStageId, setCreatedStageId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) { setProductsLoading(false); return; }
@@ -123,9 +128,10 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         return;
       }
 
-      const { data, error } = await supabase
+      const [{ data, error }, evidenceResult] = await Promise.all([supabase
         .from("lifecycle_stages")
         .select(`
+          id,
           stage_name,
           subtitle,
           co2_impact_kg,
@@ -140,7 +146,8 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
           )
         `)
         .eq("product_id", selectedProduct)
-        .order("stage_order", { ascending: true });
+        .order("stage_order", { ascending: true }),
+        (supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<{data:EvidenceRow[]|null;error:{message:string}|null}>)("get_my_organization_evidence",{p_product_id:selectedProduct})]);
 
       if (cancelled) return;
 
@@ -157,6 +164,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
           const status = sup?.status as string | null;
           const matSub = [tier, status].filter(Boolean).join(" · ") || "—";
           return {
+            id: r.id as string,
             stage:    (r.stage_name as string) ?? "—",
             subtitle: (r.subtitle   as string) ?? "",
             icon:      iconMeta.icon,
@@ -172,6 +180,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
               ? `${Number(r.water_usage_l).toLocaleString()} L`
               : "—",
             flagged: (r.flagged as boolean) ?? false,
+            evidence: (evidenceResult.data ?? []).filter(e => e.lifecycle_stage_id === r.id),
           };
         });
         setRows(mapped);
@@ -209,6 +218,8 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orgId = (member as any).organization_id as string;
 
+    let stageId = createdStageId;
+    if (!stageId) {
     const { data: stage, error: insertError } = await client
       .from("lifecycle_stages")
       .insert({
@@ -223,34 +234,62 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any).select("id").single();
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
+    stageId = stage.id;
+    setCreatedStageId(stage.id);
+    setRefreshKey(k => k + 1);
+    }
     if (certificateFile) {
       setSavingLabel("Authorizing upload…");
       type Intent = { evidence_id: string; bucket_id: string; storage_path: string; upload_expires_at: string };
       const callRpc = client.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: Intent[] | null; error: { message: string } | null }>;
       const { data: intents, error: intentError } = await callRpc("create_evidence_upload_intent", {
-        p_lifecycle_stage_id: stage.id,
+        p_lifecycle_stage_id: stageId,
         p_document_type: "certificate",
         p_original_filename: certificateFile.name,
         p_mime_type: certificateFile.type,
         p_size_bytes: certificateFile.size,
       });
       const intent = intents?.[0];
-      if (intentError || !intent) { setSaveError(intentError?.message ?? "Upload authorization failed."); setSaving(false); return; }
+      if (intentError || !intent) { setSaveError(`Stage saved. Evidence upload authorization failed: ${intentError?.message ?? "try again"}`); setSaving(false); return; }
       setSavingLabel("Uploading evidence…");
       const { error: uploadError } = await client.storage.from(intent.bucket_id)
         .upload(intent.storage_path, certificateFile, { upsert: false, contentType: certificateFile.type });
-      if (uploadError) { setSaveError(`Certificate upload failed: ${uploadError.message}`); setSaving(false); return; }
+      if (uploadError) {
+        await callRpc("cancel_evidence_upload_intent", { p_evidence_id: intent.evidence_id }).catch(() => undefined);
+        setSaveError(`Stage saved. Evidence upload failed: ${uploadError.message}. Retry to reuse this stage.`); setSaving(false); return;
+      }
       setSavingLabel("Finalizing evidence…");
       const { error: finalizeError } = await callRpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
-      if (finalizeError) { setSaveError(`Evidence finalization failed: ${finalizeError.message}`); setSaving(false); return; }
+      if (finalizeError) { setSaveError(`Stage saved. Evidence finalization failed: ${finalizeError.message}. Retry finalization before starting another upload.`); setSaving(false); return; }
     }
     void logAudit({ action: "stage_added", entity_type: "lifecycle_stage", entity_name: addForm.stage_name.trim() });
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
     setCertificateFile(null);
+    setCreatedStageId(null);
     setSavingLabel("Saving…");
     setRefreshKey(k => k + 1);
     setSaving(false);
+  }
+
+  async function reviewEvidence(id:string,decision:"approved"|"rejected") {
+    if(!supabase) return;
+    const reason=decision==="rejected" ? window.prompt("Rejection reason (required)") : null;
+    if(decision==="rejected" && (!reason || reason.trim().length<3)) return;
+    const {error}=await supabase.rpc("review_evidence_upload" as never,{p_evidence_id:id,p_decision:decision,p_rejection_reason:reason} as never);
+    if(error) setFetchError(error.message); else setRefreshKey(k=>k+1);
+  }
+  async function certifyEvidence(e:EvidenceRow) {
+    if(!supabase) return;
+    const name=window.prompt("Certification name"); const expiry=window.prompt("Expiry date (YYYY-MM-DD)");
+    if(!name || !expiry) return;
+    const {error}=await supabase.rpc("create_certification_from_evidence" as never,{p_evidence_id:e.evidence_id,p_name:name,p_expiry_date:expiry} as never);
+    if(error) setFetchError(error.message); else setRefreshKey(k=>k+1);
+  }
+  async function revokeCertification(id:string) {
+    if(!supabase) return;
+    const {error}=await supabase.rpc("revoke_certification" as never,{p_certification_id:id} as never);
+    if(error) setFetchError(error.message); else setRefreshKey(k=>k+1);
   }
 
   const hasFlagged = rows.some(r => r.flagged);
@@ -390,18 +429,17 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
                         <div className="text-xs text-muted-foreground mt-0.5">{row.matSub}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {row.certs.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {row.certs.map((cert, j) => (
-                              <span key={j} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cert.color}`}>
-                                {cert.alert && <AlertTriangle className="w-3 h-3" />}
-                                {cert.name}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                        <div className="space-y-3 whitespace-normal min-w-64">{row.evidence.length===0 && <span className="text-xs text-muted-foreground">Upload evidence</span>}
+                        {row.evidence.map(e=><section key={e.evidence_id} className="rounded border p-2 text-xs">
+                          <p className="font-medium">{e.original_filename}</p><p>{e.document_type.replaceAll("_"," ")} · {e.evidence_status.replaceAll("_"," ")}</p>
+                          {e.uploaded_at&&<p>Uploaded {new Date(e.uploaded_at).toLocaleString()} by {e.uploaded_by}</p>}
+                          {e.reviewed_at&&<p>Reviewed {new Date(e.reviewed_at).toLocaleString()} by {e.reviewed_by}</p>}
+                          {e.rejection_reason&&<p className="text-red-700">{e.rejection_reason}</p>}
+                          {e.evidence_status!=="upload_pending"&&<SecureDocumentLink evidenceId={e.evidence_id}/>}
+                          {canEdit&&e.evidence_status==="pending_review"&&<div className="mt-2 flex gap-2"><button onClick={()=>void reviewEvidence(e.evidence_id,"approved")}>Approve</button><button onClick={()=>void reviewEvidence(e.evidence_id,"rejected")}>Reject</button></div>}
+                          {canEdit&&e.evidence_status==="approved"&&!e.certification_id&&<button onClick={()=>void certifyEvidence(e)}>Create certification</button>}
+                          {e.certification_id&&<p>{e.certification_name} · {e.certification_status} {canEdit&&e.certification_status==="verified"&&<button onClick={()=>void revokeCertification(e.certification_id!)}>Revoke</button>}</p>}
+                        </section>)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className={`font-medium ${row.co2Pos ? "text-primary" : "text-foreground"}`}>{row.co2Val}</div>
@@ -500,7 +538,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
             </div>
             <div className="px-6 py-4 border-t border-border bg-gray-50/50 flex items-center justify-end gap-3">
               <button
-                onClick={() => { setShowAddModal(false); setCertificateFile(null); setSavingLabel("Saving…"); }}
+                onClick={() => { setShowAddModal(false); setCertificateFile(null); setCreatedStageId(null); setSavingLabel("Saving…"); }}
                 disabled={saving}
                 className="px-4 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted transition-colors disabled:opacity-50">
                 Cancel

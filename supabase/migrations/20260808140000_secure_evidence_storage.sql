@@ -40,6 +40,37 @@ ON CONFLICT (id) DO UPDATE SET
   name=EXCLUDED.name, public=false, file_size_limit=EXCLUDED.file_size_limit,
   allowed_mime_types=EXCLUDED.allowed_mime_types;
 
+-- A lifecycle stage is tenant-owned as a whole. Validate before installing
+-- composite keys so a historical cross-tenant relationship is never blessed.
+DO $stage_scope$
+DECLARE v_bad record;
+BEGIN
+  SELECT s.id,
+    CASE WHEN p.id IS NULL THEN 'product does not exist'
+         WHEN p.organization_id IS DISTINCT FROM s.organization_id THEN 'product belongs to another organization'
+         WHEN s.supplier_id IS NOT NULL AND su.id IS NULL THEN 'supplier does not exist'
+         WHEN su.organization_id IS DISTINCT FROM s.organization_id THEN 'supplier belongs to another organization'
+    END AS reason
+  INTO v_bad
+  FROM public.lifecycle_stages s
+  LEFT JOIN public.products p ON p.id=s.product_id
+  LEFT JOIN public.suppliers su ON su.id=s.supplier_id
+  WHERE s.organization_id IS NULL OR s.product_id IS NULL OR p.id IS NULL OR p.organization_id IS DISTINCT FROM s.organization_id
+     OR (s.supplier_id IS NOT NULL AND (su.id IS NULL OR su.organization_id IS DISTINCT FROM s.organization_id))
+  LIMIT 1;
+  IF FOUND THEN RAISE EXCEPTION 'lifecycle stage % cannot be secured: %',v_bad.id,v_bad.reason; END IF;
+END $stage_scope$;
+
+ALTER TABLE public.products ADD CONSTRAINT products_id_organization_key UNIQUE(id,organization_id);
+ALTER TABLE public.suppliers ADD CONSTRAINT suppliers_id_organization_key UNIQUE(id,organization_id);
+ALTER TABLE public.lifecycle_stages
+  ALTER COLUMN organization_id SET NOT NULL,
+  ALTER COLUMN product_id SET NOT NULL,
+  ADD CONSTRAINT lifecycle_stage_product_scope_fkey FOREIGN KEY(product_id,organization_id)
+    REFERENCES public.products(id,organization_id),
+  ADD CONSTRAINT lifecycle_stage_supplier_scope_fkey FOREIGN KEY(supplier_id,organization_id)
+    REFERENCES public.suppliers(id,organization_id);
+
 ALTER TABLE public.evidence_uploads RENAME COLUMN file_url TO storage_path;
 ALTER TABLE public.evidence_uploads
   ADD COLUMN storage_bucket text NOT NULL DEFAULT 'compliance_docs',
@@ -122,21 +153,61 @@ ALTER TABLE public.evidence_uploads
   ADD CONSTRAINT evidence_uploader_check CHECK (uploaded_by IS NOT NULL OR legacy_migrated),
   ADD CONSTRAINT evidence_expiry_check CHECK (status<>'upload_pending' OR upload_expires_at IS NOT NULL),
   ADD CONSTRAINT evidence_review_check CHECK (
-    (status IN ('approved','rejected')) = (reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)),
+    (status IN ('approved','rejected') AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL)
+    OR (status IN ('upload_pending','pending_review') AND reviewed_by IS NULL AND reviewed_at IS NULL)
+    OR status='superseded'),
   ADD CONSTRAINT evidence_rejection_check CHECK (
     (status='rejected' AND length(btrim(rejection_reason))>=3) OR
-    (status<>'rejected' AND rejection_reason IS NULL)),
+    (status='superseded') OR
+    (status NOT IN ('rejected','superseded') AND rejection_reason IS NULL)),
   ADD CONSTRAINT evidence_supersession_check CHECK (
     (status='superseded' AND superseded_at IS NOT NULL AND superseded_by IS NOT NULL AND superseded_by<>id)
     OR (status<>'superseded' AND superseded_at IS NULL AND superseded_by IS NULL));
+
+-- A legacy unverified row has no authoritative evidence review or creator. It
+-- cannot be guessed into a verified record, so abort with its identity.
+DO $legacy_certifications$
+DECLARE v_bad record;
+BEGIN
+ SELECT c.id,
+   CASE WHEN c.organization_id IS NULL THEN 'organization is null'
+        WHEN c.supplier_id IS NULL THEN 'supplier is null'
+        WHEN c.evidence_id IS NULL THEN 'evidence is null'
+        WHEN c.verification_status IS NULL THEN 'verification status is null'
+        WHEN c.verification_status NOT IN ('verified','revoked') THEN 'verification status is not authoritative'
+        WHEN e.id IS NULL THEN 'evidence does not exist'
+        WHEN e.status<>'approved' THEN 'evidence is not approved'
+        WHEN e.organization_id IS DISTINCT FROM c.organization_id THEN 'organization differs from evidence'
+        WHEN e.supplier_id IS DISTINCT FROM c.supplier_id THEN 'supplier differs from evidence'
+        WHEN e.document_type NOT IN ('certificate','test_report') THEN 'evidence type cannot certify'
+        ELSE 'creator identity cannot be established safely'
+   END reason INTO v_bad
+ FROM public.certifications c LEFT JOIN public.evidence_uploads e ON e.id=c.evidence_id
+ WHERE c.organization_id IS NULL OR c.supplier_id IS NULL OR c.evidence_id IS NULL
+   OR c.verification_status IS NULL OR c.verification_status NOT IN ('verified','revoked')
+   OR e.id IS NULL OR e.status<>'approved' OR e.organization_id IS DISTINCT FROM c.organization_id
+   OR e.supplier_id IS DISTINCT FROM c.supplier_id OR e.document_type NOT IN ('certificate','test_report')
+   OR c.id IS NOT NULL
+ LIMIT 1;
+ IF FOUND THEN RAISE EXCEPTION 'legacy certification % cannot be safely migrated: %',v_bad.id,v_bad.reason; END IF;
+END $legacy_certifications$;
 
 ALTER TABLE public.certifications
   ADD COLUMN created_by uuid REFERENCES public.profiles(id),
   ADD COLUMN created_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN revoked_at timestamptz,
   ADD COLUMN revoked_by uuid REFERENCES public.profiles(id),
+  ALTER COLUMN organization_id SET NOT NULL,
+  ALTER COLUMN supplier_id SET NOT NULL,
+  ALTER COLUMN evidence_id SET NOT NULL,
+  ALTER COLUMN verification_status DROP DEFAULT,
+  ALTER COLUMN verification_status SET NOT NULL,
+  ALTER COLUMN created_by SET NOT NULL,
   DROP CONSTRAINT IF EXISTS certifications_verification_status_check,
-  ADD CONSTRAINT certifications_verification_status_check CHECK (verification_status IN ('verified','revoked'));
+  ADD CONSTRAINT certifications_verification_status_check CHECK (verification_status IN ('verified','revoked')),
+  ADD CONSTRAINT certifications_revocation_check CHECK (
+    (verification_status='verified' AND revoked_at IS NULL AND revoked_by IS NULL)
+    OR (verification_status='revoked' AND revoked_at IS NOT NULL AND revoked_by IS NOT NULL));
 CREATE UNIQUE INDEX certifications_active_evidence_uidx ON public.certifications(evidence_id)
   WHERE verification_status='verified';
 
@@ -160,16 +231,19 @@ REVOKE ALL ON FUNCTION public.validate_evidence_scope() FROM PUBLIC,anon,authent
 CREATE TRIGGER validate_evidence_scope_trigger BEFORE INSERT OR UPDATE ON public.evidence_uploads
 FOR EACH ROW EXECUTE FUNCTION public.validate_evidence_scope();
 
-CREATE OR REPLACE FUNCTION public.evidence_actor_authorized(p_stage uuid,p_actor uuid)
+CREATE OR REPLACE FUNCTION public.current_actor_can_upload_evidence(p_lifecycle_stage_id uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT p_actor IS NOT NULL AND EXISTS (
+ SELECT auth.uid() IS NOT NULL AND EXISTS (
   SELECT 1 FROM public.lifecycle_stages s
-  WHERE s.id=p_stage AND s.supplier_id IS NOT NULL AND (
-    EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=p_actor AND m.organization_id=s.organization_id AND m.role IN ('admin','manager'))
-    OR (NOT EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=p_actor)
-        AND EXISTS(SELECT 1 FROM public.supplier_contacts c WHERE c.profile_id=p_actor AND c.supplier_id=s.supplier_id))))
+  JOIN public.products p ON (p.id,p.organization_id)=(s.product_id,s.organization_id)
+  JOIN public.suppliers su ON (su.id,su.organization_id)=(s.supplier_id,s.organization_id)
+  WHERE s.id=p_lifecycle_stage_id AND p.status<>'archived' AND (
+    EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid() AND m.organization_id=s.organization_id AND m.role IN ('admin','manager'))
+    OR (NOT EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid())
+        AND EXISTS(SELECT 1 FROM public.supplier_contacts c WHERE c.profile_id=auth.uid() AND c.supplier_id=s.supplier_id))))
 $$;
-REVOKE ALL ON FUNCTION public.evidence_actor_authorized(uuid,uuid) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.current_actor_can_upload_evidence(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.current_actor_can_upload_evidence(uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.create_evidence_upload_intent(p_lifecycle_stage_id uuid,p_document_type text,p_original_filename text,p_mime_type text,p_size_bytes bigint)
 RETURNS TABLE(evidence_id uuid,bucket_id text,storage_path text,upload_expires_at timestamptz)
@@ -181,16 +255,20 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'lifecycle stage not found'; END IF;
  IF v_stage.supplier_id IS NULL THEN RAISE EXCEPTION 'lifecycle stage has no supplier'; END IF;
  IF v_stage.status='archived' THEN RAISE EXCEPTION 'archived products cannot receive evidence'; END IF;
- IF NOT public.evidence_actor_authorized(p_lifecycle_stage_id,v_actor) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
+ IF NOT public.current_actor_can_upload_evidence(p_lifecycle_stage_id) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
  IF p_document_type IS NULL OR p_document_type NOT IN ('certificate','test_report','material_declaration','invoice','other') THEN RAISE EXCEPTION 'invalid document type'; END IF;
  IF p_original_filename IS NULL OR length(btrim(p_original_filename))=0 OR length(p_original_filename)>255 OR p_original_filename ~ '[/\\[:cntrl:]]' THEN RAISE EXCEPTION 'invalid filename'; END IF;
  v_ext:=CASE p_mime_type WHEN 'application/pdf' THEN 'pdf' WHEN 'image/png' THEN 'png' WHEN 'image/jpeg' THEN 'jpg' END;
  IF v_ext IS NULL OR lower(p_original_filename) !~ CASE v_ext WHEN 'jpg' THEN '\.(jpg|jpeg)$' ELSE '\.'||v_ext||'$' END THEN RAISE EXCEPTION 'filename extension and MIME type must agree'; END IF;
  IF p_size_bytes IS NULL OR p_size_bytes NOT BETWEEN 1 AND 10485760 THEN RAISE EXCEPTION 'file size must be between 1 byte and 10 MiB'; END IF;
  v_path:='evidence/'||v_id||'/'||encode(extensions.gen_random_bytes(32),'hex')||'.'||v_ext;
- SELECT EXISTS(SELECT 1 FROM public.evidence_uploads WHERE lifecycle_stage_id=p_lifecycle_stage_id AND status='rejected') INTO v_resub;
+ SELECT EXISTS(SELECT 1 FROM public.evidence_uploads WHERE lifecycle_stage_id=p_lifecycle_stage_id AND status='rejected')
+   AND EXISTS(SELECT 1 FROM public.supplier_contacts WHERE profile_id=v_actor AND supplier_id=v_stage.supplier_id)
+ INTO v_resub;
  INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes,upload_expires_at)
  VALUES(v_id,v_stage.organization_id,v_stage.supplier_id,p_lifecycle_stage_id,v_path,p_document_type,'upload_pending',v_actor,p_original_filename,p_mime_type,p_size_bytes,v_exp);
+ UPDATE public.evidence_uploads SET status='superseded',superseded_at=now(),superseded_by=v_id
+ WHERE lifecycle_stage_id=p_lifecycle_stage_id AND id<>v_id AND status='rejected';
  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_stage.organization_id,v_actor,CASE WHEN v_resub THEN 'supplier_resubmission' ELSE 'evidence_upload_intent_created' END,'evidence_upload',v_id::text);
  RETURN QUERY SELECT v_id,'compliance_docs'::text,v_path,v_exp;
 END $$;
@@ -204,7 +282,7 @@ BEGIN
  IF NOT FOUND OR v.uploaded_by IS DISTINCT FROM v_actor THEN RAISE EXCEPTION 'upload intent not found' USING ERRCODE='42501'; END IF;
  IF v.status<>'upload_pending' THEN RAISE EXCEPTION 'upload intent is not pending'; END IF;
  IF v.upload_expires_at<=now() THEN RAISE EXCEPTION 'upload intent expired'; END IF;
- IF NOT public.evidence_actor_authorized(v.lifecycle_stage_id,v_actor) THEN RAISE EXCEPTION 'authorization is no longer valid' USING ERRCODE='42501'; END IF;
+ IF NOT public.current_actor_can_upload_evidence(v.lifecycle_stage_id) THEN RAISE EXCEPTION 'authorization is no longer valid' USING ERRCODE='42501'; END IF;
  SELECT count(*),min(o.owner::text),min(o.metadata::text)::jsonb INTO v_count,v_owner,v_metadata FROM storage.objects o WHERE o.bucket_id=v.storage_bucket AND o.name=v.storage_path;
  IF v_count<>1 THEN RAISE EXCEPTION 'exactly one uploaded object is required'; END IF;
  IF v_owner IS DISTINCT FROM v_actor::text THEN RAISE EXCEPTION 'storage object owner mismatch'; END IF;
@@ -223,21 +301,22 @@ BEGIN
  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'evidence_upload_intent_cancelled','evidence_upload',v.id::text);
 END $$;
 
-CREATE OR REPLACE FUNCTION public.can_read_evidence_object(p_bucket text,p_path text,p_actor uuid DEFAULT auth.uid())
+CREATE OR REPLACE FUNCTION public.current_actor_can_read_evidence_object(p_bucket text,p_path text)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
- SELECT p_actor IS NOT NULL AND EXISTS(SELECT 1 FROM public.evidence_uploads e WHERE e.storage_bucket=p_bucket AND e.storage_path=p_path
+ SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM public.evidence_uploads e WHERE e.storage_bucket=p_bucket AND e.storage_path=p_path
  AND e.status IN ('pending_review','approved','rejected','superseded') AND
- (EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=p_actor AND m.organization_id=e.organization_id)
-  OR EXISTS(SELECT 1 FROM public.supplier_contacts c WHERE c.profile_id=p_actor AND c.supplier_id=e.supplier_id)))
+ (EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid() AND m.organization_id=e.organization_id)
+  OR (NOT EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid())
+      AND EXISTS(SELECT 1 FROM public.supplier_contacts c WHERE c.profile_id=auth.uid() AND c.supplier_id=e.supplier_id))))
 $$;
-REVOKE ALL ON FUNCTION public.can_read_evidence_object(text,text,uuid) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.can_read_evidence_object(text,text,uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.current_actor_can_read_evidence_object(text,text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.current_actor_can_read_evidence_object(text,text) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.get_evidence_download_target(p_evidence_id uuid)
 RETURNS TABLE(bucket_id text,storage_path text,original_filename text,mime_type text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT e.storage_bucket,e.storage_path,e.original_filename,e.mime_type FROM public.evidence_uploads e
- WHERE e.id=p_evidence_id AND e.status<>'upload_pending' AND public.can_read_evidence_object(e.storage_bucket,e.storage_path,auth.uid())
+ WHERE e.id=p_evidence_id AND e.status<>'upload_pending' AND public.current_actor_can_read_evidence_object(e.storage_bucket,e.storage_path)
 $$;
 
 CREATE OR REPLACE FUNCTION public.review_evidence_upload(p_evidence_id uuid,p_decision text,p_rejection_reason text DEFAULT NULL) RETURNS void
@@ -276,11 +355,46 @@ BEGIN
  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'certification_revoked','certification',v.id::text);
 END $$;
 
+CREATE OR REPLACE FUNCTION public.validate_certification_scope()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v record;
+BEGIN
+ SELECT e.organization_id,e.supplier_id,e.status,e.document_type INTO v
+ FROM public.evidence_uploads e WHERE e.id=NEW.evidence_id;
+ IF NOT FOUND OR v.organization_id IS DISTINCT FROM NEW.organization_id
+   OR v.supplier_id IS DISTINCT FROM NEW.supplier_id
+   OR v.document_type NOT IN ('certificate','test_report')
+   OR (NEW.verification_status='verified' AND v.status<>'approved')
+ THEN RAISE EXCEPTION 'certification scope requires matching approved evidence'; END IF;
+ RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.validate_certification_scope() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER validate_certification_scope_trigger BEFORE INSERT OR UPDATE ON public.certifications
+FOR EACH ROW EXECUTE FUNCTION public.validate_certification_scope();
+
+CREATE OR REPLACE FUNCTION public.get_my_organization_evidence(p_product_id uuid DEFAULT NULL)
+RETURNS TABLE(evidence_id uuid,lifecycle_stage_id uuid,document_type text,original_filename text,
+ evidence_status text,uploaded_by uuid,uploaded_at timestamptz,reviewed_by uuid,reviewed_at timestamptz,
+ rejection_reason text,certification_id uuid,certification_name text,certification_status text,certification_expiry date)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT e.id,e.lifecycle_stage_id,e.document_type,e.original_filename,e.status,e.uploaded_by,e.uploaded_at,
+   e.reviewed_by,e.reviewed_at,e.rejection_reason,c.id,c.name,c.verification_status,c.expiry_date
+ FROM public.evidence_uploads e
+ JOIN public.lifecycle_stages s ON s.id=e.lifecycle_stage_id AND s.organization_id=e.organization_id
+ LEFT JOIN public.certifications c ON c.evidence_id=e.id
+ WHERE EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid() AND m.organization_id=e.organization_id)
+   AND (p_product_id IS NULL OR s.product_id=p_product_id)
+ ORDER BY e.created_at DESC
+$$;
+
 CREATE OR REPLACE FUNCTION public.get_my_supplier_evidence_tasks()
 RETURNS TABLE(lifecycle_stage_id uuid,stage_name text,product_name text,document_requirement text,evidence_status text,evidence_id uuid,rejection_reason text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT s.id,s.stage_name,p.name,'Evidence document'::text,e.status,e.id,e.rejection_reason
- FROM public.supplier_contacts c JOIN public.lifecycle_stages s ON s.supplier_id=c.supplier_id JOIN public.products p ON p.id=s.product_id
+ FROM public.supplier_contacts c
+ JOIN public.suppliers su ON su.id=c.supplier_id
+ JOIN public.lifecycle_stages s ON (s.supplier_id,s.organization_id)=(su.id,su.organization_id)
+ JOIN public.products p ON (p.id,p.organization_id)=(s.product_id,s.organization_id)
  LEFT JOIN LATERAL (SELECT x.id,x.status,x.rejection_reason FROM public.evidence_uploads x WHERE x.lifecycle_stage_id=s.id ORDER BY x.created_at DESC LIMIT 1)e ON true
  WHERE c.profile_id=auth.uid() AND p.status<>'archived'
 $$;
@@ -305,11 +419,11 @@ CREATE POLICY compliance_docs_insert ON storage.objects FOR INSERT TO authentica
   AND metadata->>'size' ~ '^[0-9]+$' AND (metadata->>'size')::bigint BETWEEN 1 AND 10485760
   AND EXISTS(SELECT 1 FROM public.evidence_uploads e WHERE e.storage_bucket=bucket_id AND e.storage_path=name AND e.status='upload_pending'
     AND e.upload_expires_at>now() AND e.uploaded_by=auth.uid() AND e.mime_type=metadata->>'mimetype' AND e.size_bytes=(metadata->>'size')::bigint
-    AND public.evidence_actor_authorized(e.lifecycle_stage_id,auth.uid())));
+    AND public.current_actor_can_upload_evidence(e.lifecycle_stage_id)));
 CREATE POLICY compliance_docs_select ON storage.objects FOR SELECT TO authenticated USING
- (bucket_id='compliance_docs' AND public.can_read_evidence_object(bucket_id,name,auth.uid()));
+ (bucket_id='compliance_docs' AND public.current_actor_can_read_evidence_object(bucket_id,name));
 
-REVOKE ALL ON FUNCTION public.create_evidence_upload_intent(uuid,text,text,text,bigint),public.finalize_evidence_upload(uuid),public.cancel_evidence_upload_intent(uuid),public.get_evidence_download_target(uuid),public.review_evidence_upload(uuid,text,text),public.create_certification_from_evidence(uuid,text,date),public.revoke_certification(uuid),public.get_my_supplier_evidence_tasks() FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.create_evidence_upload_intent(uuid,text,text,text,bigint),public.finalize_evidence_upload(uuid),public.cancel_evidence_upload_intent(uuid),public.get_evidence_download_target(uuid),public.review_evidence_upload(uuid,text,text),public.create_certification_from_evidence(uuid,text,date),public.revoke_certification(uuid),public.get_my_supplier_evidence_tasks() TO authenticated;
+REVOKE ALL ON FUNCTION public.create_evidence_upload_intent(uuid,text,text,text,bigint),public.finalize_evidence_upload(uuid),public.cancel_evidence_upload_intent(uuid),public.get_evidence_download_target(uuid),public.review_evidence_upload(uuid,text,text),public.create_certification_from_evidence(uuid,text,date),public.revoke_certification(uuid),public.get_my_supplier_evidence_tasks(),public.get_my_organization_evidence(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.create_evidence_upload_intent(uuid,text,text,text,bigint),public.finalize_evidence_upload(uuid),public.cancel_evidence_upload_intent(uuid),public.get_evidence_download_target(uuid),public.review_evidence_upload(uuid,text,text),public.create_certification_from_evidence(uuid,text,date),public.revoke_certification(uuid),public.get_my_supplier_evidence_tasks(),public.get_my_organization_evidence(uuid) TO authenticated;
 
 COMMENT ON FUNCTION public.cancel_evidence_upload_intent(uuid) IS 'Cancels the database intent only. Any uploaded bytes are retained for a later privileged abandoned-object cleanup process.';

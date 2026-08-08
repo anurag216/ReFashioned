@@ -28,9 +28,17 @@ export function SupplierWorkspace({ access, email, onSignOut }: { access: Suppli
     const intent = intentResult.data?.[0];
     if (intentResult.error || !intent) { setError(intentResult.error?.message ?? "Upload authorization failed."); setUploading(null); return; }
     const stored = await supabase.storage.from(intent.bucket_id).upload(intent.storage_path, file, { upsert: false, contentType: file.type });
-    if (stored.error) { setError(stored.error.message); setUploading(null); return; }
+    if (stored.error) { await rpc("cancel_evidence_upload_intent",{p_evidence_id:intent.evidence_id}).catch(()=>undefined); setError(`Upload failed: ${stored.error.message}. You can retry.`); await loadTasks(); setUploading(null); return; }
     const finalized = await rpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
     if (finalized.error) { setError(finalized.error.message); setUploading(null); return; }
+    await loadTasks(); setUploading(null);
+  }
+  async function cancelIntent(evidenceId:string) {
+    if(!supabase || uploading) return;
+    setUploading(evidenceId); setError(null);
+    const rpc=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<{error:{message:string}|null}>;
+    const result=await rpc("cancel_evidence_upload_intent",{p_evidence_id:evidenceId});
+    if(result.error) setError(`Unable to cancel: ${result.error.message}`);
     await loadTasks(); setUploading(null);
   }
 
@@ -49,6 +57,7 @@ export function SupplierWorkspace({ access, email, onSignOut }: { access: Suppli
           {task.rejection_reason && <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-900">Review feedback: {task.rejection_reason}</p>}
           <div className="mt-3 flex gap-3">
             {task.evidence_id && task.evidence_status !== "upload_pending" && <SecureDocumentLink evidenceId={task.evidence_id} label="View submission" />}
+            {task.evidence_id && task.evidence_status === "upload_pending" && <button onClick={()=>void cancelIntent(task.evidence_id!)} disabled={uploading!==null} className="rounded border px-3 py-1 text-xs">Cancel pending upload</button>}
             {(task.evidence_status === null || task.evidence_status === "rejected") && <label className="inline-flex cursor-pointer items-center gap-2 rounded bg-emerald-700 px-3 py-1 text-xs text-white">
               <FileUp className="h-3 w-3" /> {uploading === task.lifecycle_stage_id ? "Uploading…" : "Submit evidence"}
               <input className="sr-only" type="file" accept="application/pdf,image/png,image/jpeg" disabled={uploading !== null} onChange={event => { const file=event.target.files?.[0]; if(file) void upload(task,file); }} />
