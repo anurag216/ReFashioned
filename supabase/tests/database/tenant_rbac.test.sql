@@ -34,7 +34,7 @@ INSERT INTO public.supplier_contacts (id, supplier_id, email) VALUES
 INSERT INTO public.lifecycle_stages (id, organization_id, product_id, supplier_id, stage_name) VALUES
  ('50000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001', 'Sourcing');
 INSERT INTO public.digital_product_passports (id, organization_id, product_id, public_slug, is_published) VALUES
- ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', 'published-a', true);
+ ('60000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001', repeat('a',64), false);
 
 SELECT ok((
   SELECT count(*) = 15 AND bool_and(c.relrowsecurity)
@@ -51,9 +51,9 @@ SELECT is((SELECT count(*) FROM public.organizations), 0::bigint, 'anonymous can
 SELECT is((SELECT count(*) FROM public.organization_members), 0::bigint, 'anonymous cannot list memberships');
 SELECT throws_ok($$SELECT count(*) FROM public.brands$$, '42501', NULL, 'anonymous cannot access legacy brands');
 SELECT throws_ok($$SELECT count(*) FROM public.users$$, '42501', NULL, 'anonymous cannot access legacy users');
-SELECT is((SELECT count(*) FROM public.digital_product_passports WHERE public_slug='published-a'), 1::bigint, 'anonymous can read published DPPs');
-SELECT is((SELECT count(*) FROM public.products WHERE id='30000000-0000-0000-0000-000000000001'), 1::bigint, 'anonymous can read published products');
-SELECT is((SELECT count(*) FROM public.lifecycle_stages WHERE id='50000000-0000-0000-0000-000000000001'), 1::bigint, 'anonymous can read published stages');
+SELECT throws_ok($$SELECT count(*) FROM public.digital_product_passports$$, '42501', NULL, 'anonymous cannot read DPP rows');
+SELECT throws_ok($$SELECT count(*) FROM public.products$$, '42501', NULL, 'anonymous cannot read products');
+SELECT throws_ok($$SELECT count(*) FROM public.lifecycle_stages$$, '42501', NULL, 'anonymous cannot read lifecycle stages');
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', true);
