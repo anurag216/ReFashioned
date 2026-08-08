@@ -12,9 +12,22 @@ BEGIN
   SELECT d.id INTO bad_id FROM public.digital_product_passports d LEFT JOIN public.products p ON p.id=d.product_id
    WHERE d.product_id IS NULL OR d.organization_id IS NULL OR p.id IS NULL OR d.organization_id IS DISTINCT FROM p.organization_id LIMIT 1;
   IF bad_id IS NOT NULL THEN RAISE EXCEPTION 'DPP % has missing or mismatched tenant/product ownership', bad_id; END IF;
-  SELECT min(id) INTO bad_id FROM public.digital_product_passports WHERE product_id IN
-    (SELECT product_id FROM public.digital_product_passports GROUP BY product_id HAVING count(*) > 1);
-  IF bad_id IS NOT NULL THEN RAISE EXCEPTION 'DPP % belongs to a product with duplicate passports', bad_id; END IF;
+  SELECT d.id
+  INTO bad_id
+  FROM public.digital_product_passports AS d
+  WHERE d.product_id IN (
+    SELECT duplicate.product_id
+    FROM public.digital_product_passports AS duplicate
+    GROUP BY duplicate.product_id
+    HAVING count(*) > 1
+  )
+  ORDER BY d.id
+  LIMIT 1;
+  IF bad_id IS NOT NULL THEN
+    RAISE EXCEPTION
+      'DPP % belongs to a product with duplicate passports',
+      bad_id;
+  END IF;
   SELECT id INTO bad_id FROM public.digital_product_passports WHERE is_published AND public_slug !~ '^[0-9a-f]{64}$' LIMIT 1;
   IF bad_id IS NOT NULL THEN RAISE EXCEPTION 'published DPP % has an incompatible public slug', bad_id; END IF;
 END $preflight$;
