@@ -140,7 +140,15 @@ SELECT set_config('request.jwt.claims','{"sub":"90000000-0000-0000-0000-00000000
 SET LOCAL ROLE authenticated;
 SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM multi_invite)),'P0001','account is already linked to another supplier','one profile cannot link to multiple suppliers');
 RESET ROLE;
-SELECT like(pg_get_functiondef('public.redeem_supplier_invite(text)'::regprocedure),'%FOR UPDATE%','redemption locks invitation/contact rows against concurrent redemption');
+SELECT ok(
+  regexp_count(
+    pg_get_functiondef(
+      'public.redeem_supplier_invite(text)'::regprocedure
+    ),
+    'FOR UPDATE'
+  ) >= 2,
+  'redemption locks both invitation and contact rows against concurrent redemption'
+);
 
 SELECT * FROM finish();
 ROLLBACK;
