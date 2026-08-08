@@ -1,0 +1,31 @@
+BEGIN;
+CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+SELECT plan(24);
+
+SELECT ok(EXISTS(SELECT 1 FROM storage.buckets WHERE id='compliance_docs'),'compliance bucket exists');
+SELECT is((SELECT public FROM storage.buckets WHERE id='compliance_docs'),false,'bucket is private');
+SELECT is((SELECT file_size_limit FROM storage.buckets WHERE id='compliance_docs'),10485760::bigint,'bucket limit is 10 MiB');
+SELECT is((SELECT allowed_mime_types FROM storage.buckets WHERE id='compliance_docs'),ARRAY['application/pdf','image/png','image/jpeg']::text[],'only safe MIME types allowed');
+SELECT is((SELECT count(*) FROM pg_catalog.pg_policies WHERE schemaname='storage' AND tablename='objects' AND (coalesce(qual,'') ILIKE '%compliance_docs%' OR coalesce(with_check,'') ILIKE '%compliance_docs%')),2::bigint,'complete bucket policy set has insert and select only');
+SELECT is((SELECT count(*) FROM pg_catalog.pg_policies WHERE schemaname='storage' AND tablename='objects' AND roles::text ILIKE '%anon%' AND (coalesce(qual,'') ILIKE '%compliance_docs%' OR coalesce(with_check,'') ILIKE '%compliance_docs%')),0::bigint,'anonymous has no bucket policy');
+SELECT ok(NOT has_table_privilege('anon','public.evidence_uploads','INSERT'),'anonymous evidence insert revoked');
+SELECT ok(NOT has_table_privilege('authenticated','public.evidence_uploads','INSERT'),'authenticated evidence insert revoked');
+SELECT ok(NOT has_table_privilege('authenticated','public.evidence_uploads','UPDATE'),'authenticated evidence update revoked');
+SELECT ok(NOT has_table_privilege('authenticated','public.evidence_uploads','DELETE'),'authenticated evidence delete revoked');
+SELECT ok(NOT has_table_privilege('authenticated','public.certifications','INSERT'),'certification insert revoked');
+SELECT ok(NOT has_table_privilege('authenticated','public.certifications','UPDATE'),'certification update revoked');
+SELECT ok(NOT has_table_privilege('authenticated','public.certifications','DELETE'),'certification delete revoked');
+SELECT has_function('public','create_evidence_upload_intent',ARRAY['uuid','text','text','text','bigint'],'upload-intent RPC exists');
+SELECT has_function('public','finalize_evidence_upload',ARRAY['uuid'],'finalize RPC exists');
+SELECT has_function('public','cancel_evidence_upload_intent',ARRAY['uuid'],'cancel RPC exists');
+SELECT has_function('public','get_evidence_download_target',ARRAY['uuid'],'download authorization RPC exists');
+SELECT has_function('public','review_evidence_upload',ARRAY['uuid','text','text'],'review RPC exists');
+SELECT has_function('public','create_certification_from_evidence',ARRAY['uuid','text','date'],'certification RPC exists');
+SELECT has_function('public','revoke_certification',ARRAY['uuid'],'revocation RPC exists');
+SELECT has_function('public','get_my_supplier_evidence_tasks',ARRAY[]::text[],'supplier task RPC exists');
+SELECT ok(NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='lifecycle_stages' AND column_name='certificate_url'),'legacy stage pointer removed');
+SELECT ok(EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid='public.evidence_uploads'::regclass AND conname='evidence_storage_path_key'),'storage paths are unique');
+SELECT ok(EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.evidence_uploads'::regclass AND tgname='validate_evidence_scope_trigger'),'scope and immutability trigger exists');
+
+SELECT * FROM finish();
+ROLLBACK;

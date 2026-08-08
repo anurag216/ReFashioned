@@ -1,49 +1,53 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 
-export function SecureDocumentLink({ path, label = "View Certificate" }: { path?: string | null; label?: string }) {
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+type DownloadTarget = {
+  bucket_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string;
+};
 
-  useEffect(() => {
-    let cancelled = false;
+/** Resolves an authorized, 60-second URL only in direct response to a click. */
+export function SecureDocumentLink({ evidenceId, label = "View document" }: { evidenceId: string; label?: string }) {
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-    async function resolveSignedUrl() {
-      if (!path || !supabase) {
-        if (!cancelled) setSignedUrl(null);
-        return;
-      }
-
-      const { data, error } = await supabase.storage
-        .from("compliance_docs")
-        .createSignedUrl(path, 3600);
-
-      if (cancelled) return;
-
-      if (error || !data?.signedUrl) {
-        setSignedUrl(null);
-        return;
-      }
-
-      setSignedUrl(data.signedUrl);
+  async function openDocument() {
+    if (!supabase || opening) return;
+    setOpening(true);
+    setError(null);
+    // The generated schema is refreshed from a clean database in CI.
+    const { data, error: authorizationError } = await (supabase.rpc as unknown as (
+      name: string, args: Record<string, string>
+    ) => Promise<{ data: DownloadTarget[] | null; error: { message: string } | null }>)("get_evidence_download_target", {
+      p_evidence_id: evidenceId,
+    });
+    const target = (data?.[0] ?? null) as DownloadTarget | null;
+    if (authorizationError || !target) {
+      setError("Document access was not authorized.");
+      setOpening(false);
+      return;
     }
+    const { data: signed, error: signingError } = await supabase.storage
+      .from(target.bucket_id)
+      .createSignedUrl(target.storage_path, 60, { download: target.original_filename });
+    if (signingError || !signed?.signedUrl) {
+      setError("The document could not be opened.");
+      setOpening(false);
+      return;
+    }
+    window.open(signed.signedUrl, "_blank", "noopener,noreferrer");
+    // The URL is deliberately kept in a local variable and discarded immediately.
+    setOpening(false);
+  }
 
-    void resolveSignedUrl();
-    return () => {
-      cancelled = true;
-    };
-  }, [path]);
-
-  if (!path || !signedUrl) return null;
-
-  return (
-    <a
-      href={signedUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted transition-colors"
-    >
-      <ExternalLink className="w-3 h-3" /> {label}
-    </a>
-  );
+  return <span className="inline-flex flex-col items-start gap-1">
+    <button type="button" onClick={() => void openDocument()} disabled={opening}
+      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted disabled:opacity-50">
+      <ExternalLink className="w-3 h-3" /> {opening ? "Authorizing…" : label}
+    </button>
+    {error && <span role="alert" className="text-xs text-red-700">{error}</span>}
+  </span>;
 }

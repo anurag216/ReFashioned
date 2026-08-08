@@ -6,7 +6,6 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { logAudit } from "../lib/audit";
-import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 
 // Stage name → icon/colour — purely presentational, lives client-side
 const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconColor: string }> = {
@@ -210,25 +209,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orgId = (member as any).organization_id as string;
 
-    // Upload certificate evidence if a file was attached
-    let certificatePath: string | null = null;
-    if (certificateFile) {
-      setSavingLabel("Uploading evidence…");
-      const filePath = `${orgId}/${Date.now()}_${certificateFile.name}`;
-      const { error: uploadError } = await client.storage
-        .from("compliance_docs")
-        .upload(filePath, certificateFile);
-      if (uploadError) {
-        setSaveError(`Certificate upload failed: ${uploadError.message}`);
-        setSavingLabel("Saving…");
-        setSaving(false);
-        return;
-      }
-      certificatePath = filePath;
-      setSavingLabel("Saving…");
-    }
-
-    const { error: insertError } = await client
+    const { data: stage, error: insertError } = await client
       .from("lifecycle_stages")
       .insert({
         product_id:      selectedProduct,
@@ -239,10 +220,30 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         co2_impact_kg:   addForm.co2_impact_kg !== "" ? Number(addForm.co2_impact_kg) : null,
         water_usage_l:   addForm.water_usage_l !== "" ? Number(addForm.water_usage_l) : null,
         supplier_id:     addForm.supplier_id || null,
-        certificate_url: certificatePath,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      } as any).select("id").single();
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
+    if (certificateFile) {
+      setSavingLabel("Authorizing upload…");
+      type Intent = { evidence_id: string; bucket_id: string; storage_path: string; upload_expires_at: string };
+      const callRpc = client.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: Intent[] | null; error: { message: string } | null }>;
+      const { data: intents, error: intentError } = await callRpc("create_evidence_upload_intent", {
+        p_lifecycle_stage_id: stage.id,
+        p_document_type: "certificate",
+        p_original_filename: certificateFile.name,
+        p_mime_type: certificateFile.type,
+        p_size_bytes: certificateFile.size,
+      });
+      const intent = intents?.[0];
+      if (intentError || !intent) { setSaveError(intentError?.message ?? "Upload authorization failed."); setSaving(false); return; }
+      setSavingLabel("Uploading evidence…");
+      const { error: uploadError } = await client.storage.from(intent.bucket_id)
+        .upload(intent.storage_path, certificateFile, { upsert: false, contentType: certificateFile.type });
+      if (uploadError) { setSaveError(`Certificate upload failed: ${uploadError.message}`); setSaving(false); return; }
+      setSavingLabel("Finalizing evidence…");
+      const { error: finalizeError } = await callRpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
+      if (finalizeError) { setSaveError(`Evidence finalization failed: ${finalizeError.message}`); setSaving(false); return; }
+    }
     void logAudit({ action: "stage_added", entity_type: "lifecycle_stage", entity_name: addForm.stage_name.trim() });
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
