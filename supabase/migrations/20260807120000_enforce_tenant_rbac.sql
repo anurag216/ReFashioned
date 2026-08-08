@@ -2,11 +2,30 @@
 -- additive and deliberately aborts rather than guessing how to repair bad roles.
 DO $migration$
 BEGIN
+  IF EXISTS (SELECT 1 FROM public.organization_members WHERE organization_id IS NULL) THEN
+    RAISE EXCEPTION 'organization_members contains null organization_id values; correct them before applying this migration';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.organization_members WHERE profile_id IS NULL) THEN
+    RAISE EXCEPTION 'organization_members contains null profile_id values; correct them before applying this migration';
+  END IF;
   IF EXISTS (
     SELECT 1 FROM public.organization_members
     WHERE role IS NULL OR role NOT IN ('admin', 'manager', 'viewer')
   ) THEN
     RAISE EXCEPTION 'organization_members contains null or unsupported roles; correct them before applying this migration';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.organization_members
+    GROUP BY organization_id
+    HAVING count(*) FILTER (WHERE role = 'admin') = 0
+  ) THEN
+    RAISE EXCEPTION 'an organization with memberships has no admin; add a valid admin before applying this migration';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.organization_members
+    GROUP BY profile_id HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION 'a profile has multiple organization memberships; the pilot supports one organization per profile';
   END IF;
 END
 $migration$;
@@ -20,6 +39,16 @@ ALTER TABLE public.organization_members
 ALTER TABLE public.organization_members
   ADD CONSTRAINT organization_members_role_check
   CHECK (role IN ('admin', 'manager', 'viewer'));
+
+-- The pilot UI has no organization switcher. Enforce that same invariant in the
+-- database so an administrator cannot create a state the client refuses to use.
+ALTER TABLE public.organization_members
+  ADD CONSTRAINT organization_members_profile_id_key UNIQUE (profile_id);
+
+-- brands/users are unused legacy MVP tables with no relationship to the active
+-- organization model. They remain available to service_role only and are not
+-- exposed through the public client API.
+REVOKE ALL ON TABLE public.brands, public.users FROM anon, authenticated;
 
 -- These functions only reveal a boolean, pin their search path, fully qualify
 -- all referenced objects, and run as their owner solely to avoid recursive RLS
@@ -125,6 +154,12 @@ BEGIN
   END LOOP;
 END
 $policies$;
+
+-- No policy or application code uses this historical recursion workaround.
+-- Remove its client grant and definition rather than retaining a broadly
+-- exposed SECURITY DEFINER routine with a weaker search path.
+REVOKE ALL ON FUNCTION public.get_auth_user_orgs() FROM PUBLIC, anon, authenticated;
+DROP FUNCTION public.get_auth_user_orgs();
 
 CREATE POLICY organization_members_select ON public.organization_members FOR SELECT TO authenticated
   USING (profile_id = auth.uid() OR public.is_org_member(organization_id));

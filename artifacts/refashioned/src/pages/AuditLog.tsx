@@ -143,7 +143,7 @@ export function AuditLogPage() {
     setLogs(rows);
 
     // Resolve profile emails from profiles table
-    const uniqueProfileIds = [...new Set(rows.map(r => r.profile_id))];
+    const uniqueProfileIds = [...new Set(rows.map(r => r.profile_id).filter((id): id is string => id !== null))];
     if (uniqueProfileIds.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: profiles } = await (client
@@ -295,14 +295,14 @@ export function AuditLogPage() {
                     <div className="w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
                       <User className="w-3 h-3 text-muted-foreground" />
                     </div>
-                    <span className="text-xs text-muted-foreground truncate">{actorLabel(log.profile_id)}</span>
+                    <span className="text-xs text-muted-foreground truncate">{log.profile_id ? actorLabel(log.profile_id) : "Unknown actor"}</span>
                   </div>
 
                   {/* Timestamp */}
                   <div className="text-right">
-                    <p className="text-xs font-medium text-foreground">{relativeTime(log.created_at)}</p>
+                    <p className="text-xs font-medium text-foreground">{log.created_at ? relativeTime(log.created_at) : "Unknown time"}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {new Date(log.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                      {log.created_at ? new Date(log.created_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—"}
                     </p>
                   </div>
                 </div>

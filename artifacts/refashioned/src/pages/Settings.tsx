@@ -2,17 +2,19 @@ import { useState, useEffect } from "react";
 import { Settings as SettingsIcon, User, Camera, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
+import { useOrg } from "../lib/api/useOrg";
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState("account");
 
-  const [orgId,          setOrgId]          = useState<string | null>(null);
   const [orgName,        setOrgName]        = useState("");
   const [userEmail,      setUserEmail]      = useState("");
   const [orgSaving,      setOrgSaving]      = useState(false);
   const [orgSaveError,   setOrgSaveError]   = useState<string | null>(null);
   const [orgSaveSuccess, setOrgSaveSuccess] = useState(false);
   const { isAdmin } = usePermissions();
+  const { data: org } = useOrg();
+  const orgId = org?.id ?? null;
 
   useEffect(() => {
     if (!supabase) return;
@@ -20,19 +22,9 @@ export function Settings() {
     (async () => {
       const { data: { user } } = await client.auth.getUser();
       if (user?.email) setUserEmail(user.email);
-      if (!user) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const id: string | null = (member as any)?.organization_id ?? null;
-      setOrgId(id);
-      if (!id) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: org } = await (client.from("organizations").select("name").eq("id", id).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if ((org as any)?.name) setOrgName((org as any).name);
+      if (org?.name) setOrgName(org.name);
     })();
-  }, []);
+  }, [org?.name]);
 
   async function handleSaveChanges() {
     if (!supabase || !orgId || !orgName.trim()) {

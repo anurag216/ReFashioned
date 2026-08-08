@@ -10,6 +10,8 @@ import { supabase } from "./lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
 import LoginScreen from "./LoginScreen";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { useCurrentMembership } from "./lib/auth/useCurrentMembership";
+import { useOrg } from "./lib/api/useOrg";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
 const Traceability = lazy(() => import("./pages/Traceability").then(m => ({ default: m.Traceability })));
@@ -56,27 +58,9 @@ function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
 }
 
 function SidebarOrgBadge() {
-  const [orgName, setOrgName] = useState<string | null>(null);
-  useEffect(() => {
-    if (!supabase) return;
-    const client = supabase;
-    (async () => {
-      const { data: { user } } = await client.auth.getUser();
-      if (!user) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const id: string | null = (member as any)?.organization_id ?? null;
-      if (!id) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: org } = await (client.from("organizations").select("name").eq("id", id).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const name: string | null = (org as any)?.name ?? null;
-      if (name) setOrgName(name);
-    })();
-  }, []);
-  if (!orgName) return null;
-  return <span className="text-[10px] text-sidebar-foreground/50 truncate leading-tight">{orgName}</span>;
+  const { data: org } = useOrg();
+  if (!org?.name) return null;
+  return <span className="text-[10px] text-sidebar-foreground/50 truncate leading-tight">{org.name}</span>;
 }
 
 const navItems = [
@@ -98,9 +82,8 @@ export default function App() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [orgCheckLoading, setOrgCheckLoading] = useState(true);
-  const [hasOrg, setHasOrg] = useState(false);
   const [location, setLocation] = useLocation();
+  const membership = useCurrentMembership(Boolean(session));
 
   async function handleSignOut() {
     if (!supabase) return;
@@ -119,29 +102,6 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, []);
-
-  // Check whether the authenticated user belongs to an org
-  useEffect(() => {
-    if (!session) {
-      setHasOrg(false);
-      setOrgCheckLoading(false);
-      return;
-    }
-    if (!supabase) { setOrgCheckLoading(false); return; }
-    const client = supabase;
-    setOrgCheckLoading(true);
-    (async () => {
-      const { data: member } = await client
-        .from("organization_members")
-        .select("organization_id")
-        .eq("profile_id", session.user.id)
-        .limit(1)
-        .maybeSingle();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setHasOrg(!!(member as any)?.organization_id);
-      setOrgCheckLoading(false);
-    })();
-  }, [session]);
 
   // Public supplier invite route — accessible without authentication
   if (location.startsWith("/join")) {
@@ -171,17 +131,29 @@ export default function App() {
   }
 
   // Wait for org membership check before rendering anything authenticated
-  if (orgCheckLoading) {
+  if (membership.isLoading) {
     return <DarkSpinner fullScreen />;
   }
 
-  // New user with no org — send them through onboarding before the shell
-  if (!hasOrg) {
+  if (membership.error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "hsl(152 53% 8%)" }}>
+        <div role="alert" className="max-w-md rounded-xl border border-red-400/30 bg-white p-6 text-center">
+          <h1 className="font-semibold text-foreground">We couldn't load your organization</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Your account cannot enter the application safely. Please contact support.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Only a confirmed zero-membership result enters onboarding. Multiple rows
+  // are surfaced as an error by the canonical query and are blocked above.
+  if (!membership.data) {
     return (
       <Suspense fallback={<DarkSpinner fullScreen />}>
         <Onboarding
           session={session}
-          onComplete={() => { setHasOrg(true); setLocation("/dashboard"); }}
+          onComplete={() => setLocation("/dashboard")}
         />
       </Suspense>
     );

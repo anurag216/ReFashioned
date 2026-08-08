@@ -23,7 +23,10 @@ export function useOrg() {
   const orgId = membership.data?.organization_id ?? null;
   return useQuery<Organization | null>({
     queryKey: ["org", orgId],
-    queryFn: () => fetchOrg(orgId),
-    enabled: !membership.isLoading && !membership.error,
+    queryFn: () => {
+      if (membership.error) throw membership.error;
+      return fetchOrg(orgId);
+    },
+    enabled: !membership.isLoading,
   });
 }

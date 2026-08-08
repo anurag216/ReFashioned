@@ -9,6 +9,10 @@ export interface CurrentMembership {
   role: OrganizationRole;
 }
 
+function isOrganizationRole(value: string): value is OrganizationRole {
+  return value === "admin" || value === "manager" || value === "viewer";
+}
+
 export const currentMembershipQueryKey = ["current-membership"] as const;
 
 export async function fetchCurrentMembership(): Promise<CurrentMembership | null> {
@@ -25,12 +29,18 @@ export async function fetchCurrentMembership(): Promise<CurrentMembership | null
   if (data.length > 1) {
     throw new Error("Multiple organization memberships are not supported yet. Contact support.");
   }
-  return data[0] ?? null;
+  const membership = data[0];
+  if (!membership) return null;
+  if (!isOrganizationRole(membership.role)) {
+    throw new Error("Your organization role is invalid. Contact support.");
+  }
+  return { ...membership, role: membership.role };
 }
 
-export function useCurrentMembership() {
+export function useCurrentMembership(enabled = true) {
   return useQuery({
     queryKey: currentMembershipQueryKey,
     queryFn: fetchCurrentMembership,
+    enabled,
   });
 }

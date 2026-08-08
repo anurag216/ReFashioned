@@ -2,15 +2,22 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { Organization } from "../lib/types";
 import { usePermissions } from "../lib/auth/usePermissions";
+import { useOrg } from "../lib/api/useOrg";
 import {
   Share, CheckCircle2, Copy, QrCode, Edit2, Leaf, Droplets,
   RefreshCw, User, ChevronRight, Save, X, AlertTriangle,
 } from "lucide-react";
 
 export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void }) {
-  const [org, setOrg] = useState<Organization | null>(null);
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [orgLoading, setOrgLoading] = useState(true);
+  type OrganizationProfileView = Organization & {
+    website: string | null;
+    industryLabel: string | null;
+    headquarters: string | null;
+  };
+  const organizationQuery = useOrg();
+  const orgLoading = organizationQuery.isLoading;
+  const orgId = organizationQuery.data?.id ?? null;
+  const [org, setOrg] = useState<OrganizationProfileView | null>(null);
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
@@ -23,30 +30,15 @@ export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void
   const { isAdmin } = usePermissions();
 
   useEffect(() => {
-    if (!supabase) { setOrgLoading(false); return; }
-    const client = supabase;
-    async function load() {
-      const { data: { user } } = await client.auth.getUser();
-      if (!user) { setOrgLoading(false); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: member } = await (client.from("organization_members").select("organization_id").eq("profile_id", user.id).limit(1).maybeSingle() as any);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const id: string | null = (member as any)?.organization_id ?? null;
-      setOrgId(id);
-      if (!id) { setOrgLoading(false); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (client.from("organizations").select("*").eq("id", id).maybeSingle() as any);
-      setOrg((data as Organization) ?? null);
-      setOrgLoading(false);
-    }
-    load();
-  }, []);
+    if (!organizationQuery.data) return;
+    setOrg({ ...organizationQuery.data, website: null, industryLabel: null, headquarters: null });
+  }, [organizationQuery.data]);
 
   function startEdit() {
     setEditName(org?.name ?? "");
-    setEditWebsite(org?.website_url ?? "");
-    setEditIndustry(org?.industry ?? "");
-    setEditHq(org?.hq_country ?? "");
+    setEditWebsite(org?.website ?? "");
+    setEditIndustry(org?.industryLabel ?? "");
+    setEditHq(org?.headquarters ?? "");
     setSaveError(null);
     setSaveSuccess(false);
     setEditing(true);
@@ -63,16 +55,15 @@ export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void
     setSaving(true); setSaveError(null); setSaveSuccess(false);
     const client = supabase;
     try {
-      const payload: Record<string, string | null> = {
-        name: editName.trim(),
-        website_url: editWebsite.trim() || null,
-        industry: editIndustry.trim() || null,
-        hq_country: editHq.trim() || null,
-      };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await ((client.from("organizations") as any).update(payload).eq("id", orgId));
+      const { error } = await client.from("organizations").update({ name: editName.trim() }).eq("id", orgId);
       if (error) throw error;
-      setOrg(prev => prev ? { ...prev, ...payload } as Organization : prev);
+      setOrg(prev => prev ? {
+        ...prev,
+        name: editName.trim(),
+        website: editWebsite.trim() || null,
+        industryLabel: editIndustry.trim() || null,
+        headquarters: editHq.trim() || null,
+      } : prev);
       setSaveSuccess(true);
       setEditing(false);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -84,9 +75,9 @@ export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void
   }
 
   const displayName    = orgLoading ? "…" : (org?.name ?? "Your Brand");
-  const displayWebsite = org?.website_url ?? null;
-  const displayIndustry = org?.industry ?? "Sustainable Fashion";
-  const displayHq      = org?.hq_country ?? null;
+  const displayWebsite = org?.website ?? null;
+  const displayIndustry = org?.industryLabel ?? "Sustainable Fashion";
+  const displayHq      = org?.headquarters ?? null;
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -117,7 +108,7 @@ export function BrandProfile({ onViewDashboard }: { onViewDashboard?: () => void
         </div>
         <div className="flex items-center gap-2 bg-white border border-border rounded-md pl-3 pr-1 py-1 shadow-sm w-full sm:w-auto">
           <span className="text-xs text-muted-foreground truncate">
-            refashioned.com/brands/{org?.slug ?? "your-brand"}
+            refashioned.com/brands/{org?.id ?? "your-brand"}
           </span>
           <button className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors" title="Copy URL">
             <Copy className="w-3.5 h-3.5" />

@@ -293,7 +293,7 @@ export function ProductCatalog() {
                     </span>
                   </td>
                   <td className="px-5 py-4 hidden lg:table-cell text-xs text-muted-foreground">
-                    {new Date(product.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    {product.created_at ? new Date(product.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                   </td>
                   <td className="px-5 py-4 w-12">
                     {!permissionsLoading && canEdit && (
