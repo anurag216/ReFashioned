@@ -644,37 +644,66 @@ export type Database = {
       supplier_invites: {
         Row: {
           created_at: string | null
+          created_by: string | null
           email: string
+          expires_at: string
           id: string
-          organization_id: string | null
+          organization_id: string
+          redeemed_at: string | null
+          redeemed_by: string | null
+          revoked_at: string | null
           status: string | null
-          supplier_id: string | null
-          token: string
+          supplier_id: string
+          token_hash: string
         }
         Insert: {
           created_at?: string | null
+          created_by?: string | null
           email: string
+          expires_at: string
           id?: string
-          organization_id?: string | null
+          organization_id: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          revoked_at?: string | null
           status?: string | null
-          supplier_id?: string | null
-          token: string
+          supplier_id: string
+          token_hash: string
         }
         Update: {
           created_at?: string | null
+          created_by?: string | null
           email?: string
+          expires_at?: string
           id?: string
-          organization_id?: string | null
+          organization_id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          revoked_at?: string | null
           status?: string | null
-          supplier_id?: string | null
-          token?: string
+          supplier_id?: string
+          token_hash?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplier_invites_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_invites_redeemed_by_fkey"
+            columns: ["redeemed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -783,6 +812,31 @@ export type Database = {
         Args: { organization_name: string }
         Returns: string
       }
+      create_supplier_invite: {
+        Args: { p_email: string; p_supplier_id: string }
+        Returns: {
+          expires_at: string
+          invitation_id: string
+          token: string
+        }[]
+      }
+      get_my_supplier_access: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          organization_name: string
+          supplier_name: string
+        }[]
+      }
+      get_supplier_invite_metadata: {
+        Args: { p_token: string }
+        Returns: {
+          expiration: string
+          invitation_state: string
+          masked_email: string
+          organization_name: string
+          supplier_name: string
+        }[]
+      }
       has_org_role: {
         Args: { allowed_roles: string[]; target_organization_id: string }
         Returns: boolean
@@ -790,6 +844,10 @@ export type Database = {
       is_org_member: {
         Args: { target_organization_id: string }
         Returns: boolean
+      }
+      redeem_supplier_invite: {
+        Args: { p_token: string }
+        Returns: undefined
       }
     }
     Enums: {

@@ -11,10 +11,11 @@ export function SupplierPortal() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ company: "", email: "", tier: "1", message: "" });
+  const [inviteForm, setInviteForm] = useState({ supplierId: "", email: "", message: "" });
   const [inviteSending, setInviteSending] = useState(false);
   const [magicLink, setMagicLink]         = useState<string | null>(null);
   const [linkCopied, setLinkCopied]       = useState(false);
+  const [inviteExpiry, setInviteExpiry]   = useState<string | null>(null);
   const [inviteError, setInviteError]     = useState<string | null>(null);
   const [selectedCerts, setSelectedCerts] = useState<string[]>(["GOTS", "Fair Trade"]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -87,23 +88,19 @@ export function SupplierPortal() {
       setSaveError(`Org lookup failed: ${memberError.message} (${memberError.code})`);
       setSaving(false); return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!(member as any)?.organization_id) {
+    if (!member?.organization_id) {
       setSaveError(`No org found for profile_id = ${user.id}`);
       setSaving(false); return;
     }
     const { error: insertError } = await client
       .from("suppliers")
       .insert({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        organization_id: (member as any).organization_id as string,
+        organization_id: member.organization_id,
         name:     addForm.name.trim(),
         tier:     Number(addForm.tier) as 1 | 2 | 3,
         status:   addForm.status,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         location: addForm.location.trim() || null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
+      });
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
     setShowAddModal(false);
     setAddForm({ name: "", location: "", tier: "1", status: "active" });
@@ -116,39 +113,23 @@ export function SupplierPortal() {
     setMagicLink(null);
     setLinkCopied(false);
     setInviteError(null);
-    setInviteForm({ company: "", email: "", tier: "1", message: "" });
+    setInviteForm({ supplierId: "", email: "", message: "" });
   }
 
   async function handleSendInvite() {
-    if (!supabase || !inviteForm.company.trim() || !inviteForm.email.trim()) return;
+    if (!supabase || !inviteForm.supplierId || !inviteForm.email.trim()) return;
     setInviteSending(true);
     setInviteError(null);
     const client = supabase;
-    const { data: { user } } = await client.auth.getUser();
-    if (!user) { setInviteError("Not authenticated."); setInviteSending(false); return; }
-    const { data: member } = await client
-      .from("organization_members")
-      .select("organization_id")
-      .eq("profile_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orgId: string | null = (member as any)?.organization_id ?? null;
-    if (!orgId) { setInviteError("No organisation found for your account."); setInviteSending(false); return; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: invite, error: insertError } = await (client.from("supplier_invites") as any)
-      .insert({ organization_id: orgId, supplier_name: inviteForm.company.trim(), email: inviteForm.email.trim() })
-      .select("token")
-      .maybeSingle();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (insertError || !(invite as any)?.token) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setInviteError((insertError as any)?.message ?? "Failed to create invite. Please try again.");
+    const { data, error: inviteRpcError } = await client.rpc("create_supplier_invite", { p_supplier_id: inviteForm.supplierId, p_email: inviteForm.email });
+    const invite = data?.[0];
+    if (inviteRpcError || !invite?.token) {
+      setInviteError(inviteRpcError?.code === "42501" ? "Only organization administrators can invite suppliers." : "Failed to create a secure invitation.");
       setInviteSending(false);
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setMagicLink(`${window.location.origin}/join?token=${(invite as any).token}`);
+    setMagicLink(`${window.location.origin}/join?token=${invite.token}`);
+    setInviteExpiry(invite.expires_at);
     setInviteSending(false);
   }
 
@@ -482,15 +463,13 @@ export function SupplierPortal() {
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-foreground mb-1.5">Company name</label>
-                  <input
-                    data-testid="input-invite-company"
-                    type="text"
-                    placeholder="e.g. Sunrise Ginning Co."
-                    value={inviteForm.company}
-                    onChange={e => setInviteForm(f => ({ ...f, company: e.target.value }))}
+                  <label className="block text-xs font-medium text-foreground mb-1.5">Existing supplier</label>
+                  <select
+                    data-testid="select-invite-supplier"
+                    value={inviteForm.supplierId}
+                    onChange={e => setInviteForm(f => ({ ...f, supplierId: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                  ><option value="">Select a supplier</option>{suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-medium text-foreground mb-1.5">Contact email</label>
@@ -502,19 +481,6 @@ export function SupplierPortal() {
                     onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
                   />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-foreground mb-1.5">Supply chain tier</label>
-                  <select
-                    data-testid="select-invite-tier"
-                    value={inviteForm.tier}
-                    onChange={e => setInviteForm(f => ({ ...f, tier: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="1">Tier 1 — Direct supplier</option>
-                    <option value="2">Tier 2 — Secondary supplier</option>
-                    <option value="3">Tier 3 — Raw material origin</option>
-                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1.5">Language</label>
@@ -559,7 +525,7 @@ export function SupplierPortal() {
                 <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-green-800">Invite created!</p>
-                  <p className="text-xs text-green-700 mt-0.5">Share this link with {inviteForm.company}</p>
+                  <p className="text-xs text-green-700 mt-0.5">Share this one-time link with the selected supplier.</p>
                 </div>
               </div>
               <div>
@@ -585,6 +551,7 @@ export function SupplierPortal() {
                   </button>
                 </div>
               </div>
+              {inviteExpiry && <p className="text-xs text-muted-foreground">Expires {new Date(inviteExpiry).toLocaleString()}.</p>}
             </div>
             )}
             <div className="px-6 py-4 border-t border-border flex items-center justify-between gap-3">
@@ -592,7 +559,7 @@ export function SupplierPortal() {
                 <>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Link2 className="w-3.5 h-3.5" />
-                    <span>Secure onboarding link generated on send</span>
+                    <span>Generating a replacement invalidates the previous pending link.</span>
                   </div>
                   <div className="flex gap-3">
                     <button onClick={closeInviteModal} className="px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors font-medium">
@@ -601,7 +568,7 @@ export function SupplierPortal() {
                     <button
                       data-testid="button-send-invite"
                       onClick={handleSendInvite}
-                      disabled={!inviteForm.company || !inviteForm.email || inviteSending}
+                      disabled={!inviteForm.supplierId || !inviteForm.email || inviteSending}
                       className="flex items-center gap-2 px-5 py-2 rounded-md text-sm font-medium transition-all shadow-sm bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {inviteSending

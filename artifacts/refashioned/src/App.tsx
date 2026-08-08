@@ -13,6 +13,8 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { useCurrentMembership } from "./lib/auth/useCurrentMembership";
 import { useOrg } from "./lib/api/useOrg";
 import { AuthUserProvider } from "./lib/auth/AuthUserContext";
+import { useSupplierAccess } from "./lib/auth/useSupplierAccess";
+import { SupplierWorkspace } from "./pages/SupplierWorkspace";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then(m => ({ default: m.Dashboard })));
 const Traceability = lazy(() => import("./pages/Traceability").then(m => ({ default: m.Traceability })));
@@ -85,6 +87,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [location, setLocation] = useLocation();
   const membership = useCurrentMembership(session?.user.id ?? null);
+  const supplierAccess = useSupplierAccess(session?.user.id ?? null);
 
   async function handleSignOut() {
     if (!supabase) return;
@@ -133,11 +136,11 @@ export default function App() {
   }
 
   // Wait for org membership check before rendering anything authenticated
-  if (membership.isLoading) {
+  if (membership.isLoading || supplierAccess.isLoading) {
     return <DarkSpinner fullScreen />;
   }
 
-  if (membership.error) {
+  if (membership.error || supplierAccess.error) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "hsl(152 53% 8%)" }}>
         <div role="alert" className="max-w-md rounded-xl border border-red-400/30 bg-white p-6 text-center">
@@ -150,6 +153,14 @@ export default function App() {
 
   // Only a confirmed zero-membership result enters onboarding. Multiple rows
   // are surfaced as an error by the canonical query and are blocked above.
+  if (membership.data && supplierAccess.data) {
+    return <div role="alert" className="min-h-screen flex items-center justify-center p-6">This account has conflicting internal and supplier access. Please contact support.</div>;
+  }
+
+  if (!membership.data && supplierAccess.data) {
+    return <SupplierWorkspace access={supplierAccess.data} email={session.user.email ?? ""} onSignOut={() => { void handleSignOut(); }} />;
+  }
+
   if (!membership.data) {
     return (
       <Suspense fallback={<DarkSpinner fullScreen />}>

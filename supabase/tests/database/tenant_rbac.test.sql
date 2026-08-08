@@ -84,7 +84,7 @@ SELECT is_empty(
     SELECT * FROM changed$$,
   'viewer cannot delete product'
 );
-SELECT throws_ok($$INSERT INTO public.supplier_invites (organization_id,email,token) VALUES ('10000000-0000-0000-0000-000000000001','viewer@test.invalid','viewer-token')$$, '42501', NULL, 'viewer cannot manage supplier invitations');
+SELECT throws_ok($$SELECT * FROM public.supplier_invites$$, '42501', NULL, 'viewer cannot manage supplier invitations');
 SELECT throws_ok($$SELECT count(*) FROM public.brands$$, '42501', NULL, 'unrelated authenticated user cannot access legacy brands');
 SELECT throws_ok($$SELECT count(*) FROM public.users$$, '42501', NULL, 'unrelated authenticated user cannot access legacy users');
 RESET ROLE;
@@ -114,7 +114,7 @@ SELECT is_empty(
 );
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','viewer')$$, '42501', NULL, 'manager cannot manage memberships');
 SELECT throws_ok($$UPDATE public.products SET organization_id='10000000-0000-0000-0000-000000000002' WHERE id='30000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'update cannot move a record to another tenant');
-SELECT throws_ok($$INSERT INTO public.supplier_invites (organization_id,email,token) VALUES ('10000000-0000-0000-0000-000000000001','manager@test.invalid','manager-token')$$, '42501', NULL, 'manager cannot manage supplier invitations');
+SELECT throws_ok($$SELECT * FROM public.supplier_invites$$, '42501', NULL, 'manager cannot manage supplier invitations');
 SELECT throws_ok($$INSERT INTO public.audit_logs (organization_id,profile_id,action,entity_type,entity_name) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','forged','product','A')$$, '42501', NULL, 'audit actor forgery is rejected');
 SELECT throws_ok($$INSERT INTO public.audit_logs (organization_id,profile_id,action,entity_type,entity_name) VALUES ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000002','cross-tenant','product','B')$$, '42501', NULL, 'cross-tenant audit insert is rejected');
 SELECT throws_ok($$UPDATE public.product_materials SET product_id='30000000-0000-0000-0000-000000000002' WHERE id='31000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'product material cannot be reassigned across tenants');
@@ -128,7 +128,7 @@ SELECT lives_ok($$UPDATE public.organizations SET name='Tenant A updated' WHERE 
 SELECT lives_ok($$INSERT INTO public.organization_members (id,organization_id,profile_id,role) VALUES ('20000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000006','manager')$$, 'admin adds a non-final membership');
 SELECT lives_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000006'$$, 'admin updates a non-final membership');
 SELECT lives_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000006'$$, 'admin removes a non-final membership');
-SELECT lives_ok($$INSERT INTO public.supplier_invites (organization_id,supplier_id,email,token) VALUES ('10000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000001','invite@test.invalid','admin-token'); UPDATE public.supplier_invites SET status='sent' WHERE token='admin-token'; DELETE FROM public.supplier_invites WHERE token='admin-token'$$, 'admin manages supplier invitations');
+SELECT throws_ok($$SELECT * FROM public.supplier_invites$$, '42501', NULL, 'admin cannot bypass invitation RPC with raw table access');
 SELECT throws_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000002','cross tenant')$$, '42501', NULL, 'admin cannot affect another tenant');
 SELECT throws_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000001'$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be demoted');
 SELECT throws_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000001'$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be deleted');
