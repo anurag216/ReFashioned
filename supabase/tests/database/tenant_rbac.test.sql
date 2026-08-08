@@ -63,8 +63,25 @@ SELECT throws_ok($$INSERT INTO public.organizations (name) VALUES ('Direct organ
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id, profile_id, role) VALUES ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','viewer')$$, '42501', NULL, 'user cannot self-join another tenant');
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id, profile_id, role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','admin')$$, '42501', NULL, 'viewer cannot assign admin');
 SELECT throws_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000001','viewer insert')$$, '42501', NULL, 'viewer cannot insert product');
-SELECT is((WITH changed AS (UPDATE public.products SET name='viewer update' WHERE id='30000000-0000-0000-0000-000000000001' RETURNING 1) SELECT count(*) FROM changed), 0::bigint, 'viewer cannot update product');
-SELECT is((WITH changed AS (DELETE FROM public.products WHERE id='30000000-0000-0000-0000-000000000001' RETURNING 1) SELECT count(*) FROM changed), 0::bigint, 'viewer cannot delete product');
+SELECT is_empty(
+  $$WITH changed AS (
+      UPDATE public.products
+      SET name = 'viewer update'
+      WHERE id = '30000000-0000-0000-0000-000000000001'
+      RETURNING 1
+    )
+    SELECT * FROM changed$$,
+  'viewer cannot update product'
+);
+SELECT is_empty(
+  $$WITH changed AS (
+      DELETE FROM public.products
+      WHERE id = '30000000-0000-0000-0000-000000000001'
+      RETURNING 1
+    )
+    SELECT * FROM changed$$,
+  'viewer cannot delete product'
+);
 SELECT throws_ok($$INSERT INTO public.supplier_invites (organization_id,email,token) VALUES ('10000000-0000-0000-0000-000000000001','viewer@test.invalid','viewer-token')$$, '42501', NULL, 'viewer cannot manage supplier invitations');
 SELECT throws_ok($$SELECT count(*) FROM public.brands$$, '42501', NULL, 'unrelated authenticated user cannot access legacy brands');
 SELECT throws_ok($$SELECT count(*) FROM public.users$$, '42501', NULL, 'unrelated authenticated user cannot access legacy users');
@@ -74,8 +91,25 @@ SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002
 SET LOCAL ROLE authenticated;
 SELECT lives_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000001','manager product')$$, 'manager inserts product');
 SELECT lives_ok($$UPDATE public.products SET name='manager updated' WHERE name='manager product'$$, 'manager updates product');
-SELECT is((WITH changed AS (DELETE FROM public.products WHERE name='manager updated' RETURNING 1) SELECT count(*) FROM changed), 0::bigint, 'manager cannot delete product');
-SELECT is((WITH changed AS (UPDATE public.organizations SET name='manager org' WHERE id='10000000-0000-0000-0000-000000000001' RETURNING 1) SELECT count(*) FROM changed), 0::bigint, 'manager cannot update organization');
+SELECT is_empty(
+  $$WITH changed AS (
+      DELETE FROM public.products
+      WHERE name = 'manager updated'
+      RETURNING 1
+    )
+    SELECT * FROM changed$$,
+  'manager cannot delete product'
+);
+SELECT is_empty(
+  $$WITH changed AS (
+      UPDATE public.organizations
+      SET name = 'manager org'
+      WHERE id = '10000000-0000-0000-0000-000000000001'
+      RETURNING 1
+    )
+    SELECT * FROM changed$$,
+  'manager cannot update organization'
+);
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','viewer')$$, '42501', NULL, 'manager cannot manage memberships');
 SELECT throws_ok($$UPDATE public.products SET organization_id='10000000-0000-0000-0000-000000000002' WHERE id='30000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'update cannot move a record to another tenant');
 SELECT throws_ok($$INSERT INTO public.supplier_invites (organization_id,email,token) VALUES ('10000000-0000-0000-0000-000000000001','manager@test.invalid','manager-token')$$, '42501', NULL, 'manager cannot manage supplier invitations');
