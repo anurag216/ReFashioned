@@ -63,6 +63,8 @@ SELECT throws_ok($$INSERT INTO public.organizations (name) VALUES ('Direct organ
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id, profile_id, role) VALUES ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000003','viewer')$$, '42501', NULL, 'user cannot self-join another tenant');
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id, profile_id, role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','admin')$$, '42501', NULL, 'viewer cannot assign admin');
 SELECT throws_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000001','viewer insert')$$, '42501', NULL, 'viewer cannot insert product');
+-- Keep data-modifying CTEs at the top level of the SQL passed to is_empty().
+-- Nesting one inside SELECT is(...) is invalid PostgreSQL syntax.
 SELECT is_empty(
   $$WITH changed AS (
       UPDATE public.products
