@@ -107,7 +107,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.redeem_supplier_invite(p_token text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, extensions
 AS $$
-DECLARE v_actor uuid:=auth.uid(); v_email text:=lower(btrim(auth.jwt()->>'email')); v record;
+DECLARE v_actor uuid:=auth.uid(); v_email text:=lower(btrim(auth.jwt()->>'email')); v record; v_contact record;
 BEGIN
   IF v_actor IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
   IF p_token IS NULL OR p_token !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invitation is invalid' USING ERRCODE='22023'; END IF;
@@ -116,12 +116,29 @@ BEGIN
   IF v.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'invitation was revoked'; END IF;
   IF v.redeemed_at IS NOT NULL THEN RAISE EXCEPTION 'invitation was already redeemed'; END IF;
   IF v.expires_at <= now() THEN RAISE EXCEPTION 'invitation has expired'; END IF;
-  IF lower(v.email) <> v_email THEN RAISE EXCEPTION 'sign in with the invited email address' USING ERRCODE='42501'; END IF;
+  IF v_email IS NULL
+     OR v_email = ''
+     OR lower(v.email) IS DISTINCT FROM v_email
+  THEN
+    RAISE EXCEPTION 'sign in with the invited email address'
+      USING ERRCODE = '42501';
+  END IF;
   IF NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=v_actor) THEN RAISE EXCEPTION 'profile required'; END IF;
   IF EXISTS(SELECT 1 FROM public.organization_members WHERE profile_id=v_actor) THEN RAISE EXCEPTION 'use a separate supplier account' USING ERRCODE='42501'; END IF;
   IF EXISTS(SELECT 1 FROM public.supplier_contacts WHERE profile_id=v_actor AND supplier_id<>v.supplier_id) THEN RAISE EXCEPTION 'account is already linked to another supplier'; END IF;
-  INSERT INTO public.supplier_contacts(supplier_id,name,email,profile_id) VALUES(v.supplier_id,split_part(v.email,'@',1),v.email,v_actor)
-    ON CONFLICT (supplier_id,lower(email)) DO UPDATE SET profile_id=v_actor;
+  SELECT * INTO v_contact
+  FROM public.supplier_contacts
+  WHERE supplier_id = v.supplier_id AND lower(email) = lower(v.email)
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    INSERT INTO public.supplier_contacts(supplier_id,name,email,profile_id)
+      VALUES(v.supplier_id,split_part(v.email,'@',1),v.email,v_actor);
+  ELSIF v_contact.profile_id IS NULL THEN
+    UPDATE public.supplier_contacts SET profile_id=v_actor WHERE id=v_contact.id;
+  ELSIF v_contact.profile_id IS DISTINCT FROM v_actor THEN
+    RAISE EXCEPTION 'supplier contact is already linked to another account'
+      USING ERRCODE = '42501';
+  END IF;
   UPDATE public.supplier_invites SET redeemed_at=now(),redeemed_by=v_actor,status='redeemed' WHERE id=v.id;
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name)
     VALUES(v.organization_id,v_actor,'supplier_invite_redeemed','supplier_invite',v.id::text);
