@@ -693,17 +693,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "supplier_invites_redeemed_by_fkey"
-            columns: ["redeemed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "supplier_invites_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_invites_redeemed_by_fkey"
+            columns: ["redeemed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -808,6 +808,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_organization_with_admin: {
+        Args: { organization_name: string }
+        Returns: string
+      }
       create_supplier_invite: {
         Args: { p_email: string; p_supplier_id: string }
         Returns: {
@@ -815,18 +819,6 @@ export type Database = {
           invitation_id: string
           token: string
         }[]
-      }
-      create_organization_with_admin: {
-        Args: { organization_name: string }
-        Returns: string
-      }
-      has_org_role: {
-        Args: { allowed_roles: string[]; target_organization_id: string }
-        Returns: boolean
-      }
-      is_org_member: {
-        Args: { target_organization_id: string }
-        Returns: boolean
       }
       get_my_supplier_access: {
         Args: Record<PropertyKey, never>
@@ -844,6 +836,14 @@ export type Database = {
           organization_name: string
           supplier_name: string
         }[]
+      }
+      has_org_role: {
+        Args: { allowed_roles: string[]; target_organization_id: string }
+        Returns: boolean
+      }
+      is_org_member: {
+        Args: { target_organization_id: string }
+        Returns: boolean
       }
       redeem_supplier_invite: {
         Args: { p_token: string }
