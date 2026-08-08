@@ -11,6 +11,9 @@ const { useCurrentMembership, session, authCallbacks } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../lib/auth/useCurrentMembership", () => ({ useCurrentMembership }));
+vi.mock("../../lib/auth/useSupplierAccess", () => ({
+  useSupplierAccess: () => ({ isLoading: false, data: null, error: null }),
+}));
 vi.mock("../../lib/api/useOrg", () => ({
   useOrg: () => ({ data: { id: "org-a", name: "Tenant A" }, isLoading: false, error: null }),
 }));
