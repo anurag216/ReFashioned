@@ -7,7 +7,7 @@ import { usePermissions } from "../lib/auth/usePermissions";
 
 type Product = { id: string; name: string; sku: string | null; season: string | null; updated_at?: string | null };
 type Stage = { stage_name: string; subtitle: string | null; stage_order: number | null; co2_impact_kg: number | null; water_usage_l: number | null };
-type Publication = { public_slug: string; is_published: boolean | null; published_at: string | null; payload_generated_at: string | null; updated_at: string };
+type Publication = { public_slug: string | null; is_published: boolean; published_at: string | null; payload_generated_at: string | null; stored_payload_hash: string | null; current_payload_hash: string; has_unpublished_changes: boolean };
 type PublishResult = { public_slug: string; published_at: string; payload_generated_at: string; payload_hash: string };
 
 export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
@@ -26,11 +26,11 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     const [productResult, stageResult, publicationResult] = await Promise.all([
       supabase.from("products").select("id,name,sku,season").eq("id", productId).maybeSingle(),
       supabase.from("lifecycle_stages").select("stage_name,subtitle,stage_order,co2_impact_kg,water_usage_l").eq("product_id", productId).order("stage_order"),
-      supabase.from("digital_product_passports").select("public_slug,is_published,published_at,payload_generated_at,updated_at").eq("product_id", productId).maybeSingle(),
+      supabase.rpc("get_product_passport_publication_state", { p_product_id: productId }),
     ]);
     setProduct(productResult.data);
     setStages(stageResult.data ?? []);
-    setPublication(publicationResult.data);
+    setPublication(publicationResult.data?.[0] ?? null);
     setLoading(false);
   }
   useEffect(() => { void load(); }, [productId]);
@@ -41,25 +41,25 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
     const { data, error } = await supabase.rpc("publish_product_passport", { p_product_id: productId });
     if (error) setMessage(error.message); else {
       const row = (data as PublishResult[] | null)?.[0];
-      if (row) setPublication({ ...row, is_published: true, updated_at: row.payload_generated_at });
-      setMessage("Passport snapshot published.");
+      if (row) setMessage("Passport snapshot published.");
+      await load();
     }
     setWorking(false);
   }
   async function unpublish() {
     if (!supabase || !productId) return;
     setWorking(true); const { error } = await supabase.rpc("unpublish_product_passport", { p_product_id: productId });
-    if (error) setMessage(error.message); else { setPublication(p => p ? { ...p, is_published: false } : p); setMessage("Passport unpublished."); }
+    if (error) setMessage(error.message); else { setMessage("Passport unpublished."); await load(); }
     setWorking(false);
   }
   async function rotate() {
     if (!supabase || !productId || !window.confirm("Rotate the public link? The old URL and QR code will stop working immediately.")) return;
     setWorking(true); const { data, error } = await supabase.rpc("rotate_product_passport_slug", { p_product_id: productId });
-    if (error) setMessage(error.message); else { setPublication(p => p ? { ...p, public_slug: data } : p); setMessage("Public link rotated."); }
+    if (error) setMessage(error.message); else { void data; setMessage("Public link rotated."); await load(); }
     setWorking(false);
   }
   const publicUrl = publication?.public_slug ? `${window.location.origin}/p/${publication.public_slug}` : null;
-  const hasChanges = Boolean(publication?.payload_generated_at && publication.updated_at > publication.payload_generated_at);
+  const hasChanges = publication?.has_unpublished_changes ?? false;
 
   if (loading) return <main className="p-10">Loading passport preview…</main>;
   if (!product) return <main className="p-10">Product not found.</main>;
@@ -68,7 +68,7 @@ export function DigitalProductPassport({ onBack }: { onBack: () => void }) {
       <button onClick={onBack} className="flex gap-2 items-center"><ArrowLeft className="w-4 h-4"/>Dashboard</button>
       <div className="flex gap-2">
         {isAdmin && <>{publication?.is_published ? <button disabled={working} onClick={unpublish} className="border rounded px-3 py-2 flex gap-2"><EyeOff className="w-4 h-4"/>Unpublish</button> : <button disabled={working} onClick={publish} className="bg-primary text-white rounded px-3 py-2 flex gap-2"><Globe className="w-4 h-4"/>Publish Passport</button>}
-        {publication && <button disabled={working} onClick={publish} className="border rounded px-3 py-2 flex gap-2"><RefreshCw className="w-4 h-4"/>Republish changes</button>}
+        {publication && (hasChanges || !publication.is_published) && <button disabled={working} onClick={publish} className={`border rounded px-3 py-2 flex gap-2 ${hasChanges ? "border-amber-500 bg-amber-50" : ""}`}><RefreshCw className="w-4 h-4"/>Republish changes</button>}
         {publication && <button disabled={working} onClick={rotate} className="border rounded px-3 py-2 flex gap-2"><RotateCw className="w-4 h-4"/>Rotate public link</button>}</>}
         <button disabled={!publication?.is_published || !publicUrl} onClick={()=>setShowQR(true)} className="border rounded px-3 py-2 flex gap-2 disabled:opacity-50"><Share className="w-4 h-4"/>Share</button>
       </div>

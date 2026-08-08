@@ -9,7 +9,7 @@ interface PublicPassportPayload {
   brand: { name: string };
   product: { name: string; identifier?: string; season?: string };
   materials: Array<{ name: string; percentage: number | null }>;
-  impact: { total_co2_kg: number; total_water_l: number };
+  impact?: { total_co2_kg?: number; total_water_l?: number };
   lifecycle: PublicLifecycleStage[];
 }
 interface PublicPassportResponse { schema_version: 1; published_at: string; payload_generated_at: string; payload: PublicPassportPayload }
@@ -47,9 +47,9 @@ export function PublicPassport({ publicSlug }: { publicSlug: string }) {
       {(payload.product.identifier || payload.product.season) && <p className="text-white/70 mt-3">{[payload.product.identifier, payload.product.season].filter(Boolean).join(" · ")}</p>}
     </div></section>
     <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
-      {(payload.impact.total_co2_kg != null || payload.impact.total_water_l != null) && <section className="grid sm:grid-cols-2 gap-4">
-        {payload.impact.total_co2_kg != null && <article className="bg-white border rounded-xl p-5"><p className="text-sm text-muted-foreground">Total CO₂ impact</p><p className="text-2xl font-semibold">{payload.impact.total_co2_kg} kg</p></article>}
-        {payload.impact.total_water_l != null && <article className="bg-white border rounded-xl p-5"><p className="text-sm text-muted-foreground">Total water use</p><p className="text-2xl font-semibold">{payload.impact.total_water_l.toLocaleString()} L</p></article>}
+      {(payload.impact?.total_co2_kg != null || payload.impact?.total_water_l != null) && <section className="grid sm:grid-cols-2 gap-4">
+        {payload.impact?.total_co2_kg != null && <article className="bg-white border rounded-xl p-5"><p className="text-sm text-muted-foreground">Total CO₂ impact</p><p className="text-2xl font-semibold">{payload.impact?.total_co2_kg} kg</p></article>}
+        {payload.impact?.total_water_l != null && <article className="bg-white border rounded-xl p-5"><p className="text-sm text-muted-foreground">Total water use</p><p className="text-2xl font-semibold">{payload.impact?.total_water_l.toLocaleString()} L</p></article>}
       </section>}
       {payload.materials.length > 0 && <section className="bg-white border rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Materials</h2><ul className="space-y-2">{payload.materials.map((m,i)=><li key={`${m.name}-${i}`} className="flex justify-between"><span>{m.name}</span>{m.percentage != null && <span>{m.percentage}%</span>}</li>)}</ul></section>}
       <section className="bg-white border rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Lifecycle</h2>{payload.lifecycle.length === 0 ? <p className="text-sm text-muted-foreground">Not publicly available</p> : <ol className="space-y-5">{payload.lifecycle.map((stage,i)=><li key={`${stage.order}-${stage.name}-${i}`} className="border-l-2 border-primary pl-4"><h3 className="font-medium">{stage.name}</h3>{stage.summary && <p className="text-sm text-muted-foreground mt-1">{stage.summary}</p>}<div className="text-sm mt-2 flex gap-4">{stage.co2_kg != null && <span>{stage.co2_kg} kg CO₂</span>}{stage.water_l != null && <span>{stage.water_l.toLocaleString()} L water</span>}</div></li>)}</ol>}</section>

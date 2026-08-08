@@ -280,11 +280,11 @@ export type Database = {
       digital_product_passports: {
         Row: {
           id: string
-          is_published: boolean | null
+          is_published: boolean
           organization_id: string
           payload_generated_at: string | null
           payload_hash: string | null
-          payload_version: number | null
+          payload_version: number
           product_id: string
           public_payload: Json | null
           public_slug: string
@@ -293,11 +293,11 @@ export type Database = {
         }
         Insert: {
           id?: string
-          is_published?: boolean | null
+          is_published?: boolean
           organization_id: string
           payload_generated_at?: string | null
           payload_hash?: string | null
-          payload_version?: number | null
+          payload_version?: number
           product_id: string
           public_payload?: Json | null
           public_slug: string
@@ -328,7 +328,7 @@ export type Database = {
           {
             foreignKeyName: "digital_product_passports_product_id_fkey"
             columns: ["product_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
@@ -823,14 +823,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      build_public_product_passport_payload: { Args: { p_product_id: string }; Returns: Json }
-      get_public_product_passport: { Args: { p_public_slug: string }; Returns: Json }
-      publish_product_passport: {
+      build_public_product_passport_payload: {
         Args: { p_product_id: string }
-        Returns: { payload_generated_at: string; payload_hash: string; public_slug: string; published_at: string }[]
+        Returns: Json
       }
-      rotate_product_passport_slug: { Args: { p_product_id: string }; Returns: string }
-      unpublish_product_passport: { Args: { p_product_id: string }; Returns: undefined }
       create_organization_with_admin: {
         Args: { organization_name: string }
         Returns: string
@@ -850,6 +846,22 @@ export type Database = {
           supplier_name: string
         }[]
       }
+      get_product_passport_publication_state: {
+        Args: { p_product_id: string }
+        Returns: {
+          current_payload_hash: string
+          has_unpublished_changes: boolean
+          is_published: boolean
+          payload_generated_at: string
+          public_slug: string
+          published_at: string
+          stored_payload_hash: string
+        }[]
+      }
+      get_public_product_passport: {
+        Args: { p_public_slug: string }
+        Returns: Json
+      }
       get_supplier_invite_metadata: {
         Args: { p_token: string }
         Returns: {
@@ -868,8 +880,25 @@ export type Database = {
         Args: { target_organization_id: string }
         Returns: boolean
       }
+      publish_product_passport: {
+        Args: { p_product_id: string }
+        Returns: {
+          payload_generated_at: string
+          payload_hash: string
+          public_slug: string
+          published_at: string
+        }[]
+      }
       redeem_supplier_invite: {
         Args: { p_token: string }
+        Returns: undefined
+      }
+      rotate_product_passport_slug: {
+        Args: { p_product_id: string }
+        Returns: string
+      }
+      unpublish_product_passport: {
+        Args: { p_product_id: string }
         Returns: undefined
       }
     }
