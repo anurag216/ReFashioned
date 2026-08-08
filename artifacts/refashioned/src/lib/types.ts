@@ -1,6 +1,7 @@
 // ─── Row types (match Supabase table columns exactly) ─────────────────────────
 
 export interface Organization {
+  [key: string]: unknown;
   id: string;
   name: string;
   slug: string;
@@ -14,6 +15,7 @@ export interface Organization {
 }
 
 export interface Profile {
+  [key: string]: unknown;
   id: string;               // references auth.users.id
   organization_id: string;
   email: string;
@@ -27,6 +29,7 @@ export interface Profile {
 }
 
 export interface Product {
+  [key: string]: unknown;
   id: string;
   organization_id: string;
   name: string;
@@ -38,6 +41,7 @@ export interface Product {
 }
 
 export interface SupplierInvite {
+  [key: string]: unknown;
   id: string;
   organization_id: string;
   supplier_name: string;
@@ -48,6 +52,7 @@ export interface SupplierInvite {
 }
 
 export interface OrganizationMember {
+  [key: string]: unknown;
   id: string;
   organization_id: string;
   profile_id: string;           // references auth.users.id
@@ -56,10 +61,13 @@ export interface OrganizationMember {
   created_at: string;
 }
 
-export type OrganizationMemberInsert = Omit<OrganizationMember, "id" | "created_at">;
+export type OrganizationMemberInsert = Omit<OrganizationMember, "id" | "created_at" | "joined_at"> & {
+  joined_at?: string;
+};
 export type OrganizationMemberUpdate = Partial<OrganizationMemberInsert>;
 
 export interface Supplier {
+  [key: string]: unknown;
   id: string;
   organization_id: string;
   name: string;
@@ -78,6 +86,7 @@ export interface Supplier {
 }
 
 export interface LifecycleStage {
+  [key: string]: unknown;
   id: string;
   product_id: string;
   organization_id: string;
@@ -98,6 +107,7 @@ export interface LifecycleStage {
 }
 
 export interface DigitalProductPassport {
+  [key: string]: unknown;
   id: string;
   product_id: string;
   organization_id: string;
@@ -192,7 +202,20 @@ export type Database = {
       };
     };
     Views:     Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      create_organization_with_admin: {
+        Args: { organization_name: string };
+        Returns: string;
+      };
+      has_org_role: {
+        Args: { target_organization_id: string; allowed_roles: string[] };
+        Returns: boolean;
+      };
+      is_org_member: {
+        Args: { target_organization_id: string };
+        Returns: boolean;
+      };
+    };
     Enums: {
       product_status:   "draft" | "in_review" | "published" | "archived";
       supplier_status:  "active" | "inactive" | "under_review";
