@@ -119,10 +119,10 @@ export default function App() {
 
   // Public DPP route — accessible without authentication
   if (location.startsWith("/p/")) {
-    const publicProductId = location.slice(3);
+    const publicSlug = location.slice(3);
     return (
       <Suspense fallback={<DarkSpinner fullScreen />}>
-        <PublicPassport productId={publicProductId} />
+        <PublicPassport publicSlug={publicSlug} />
       </Suspense>
     );
   }

@@ -281,26 +281,41 @@ export type Database = {
         Row: {
           id: string
           is_published: boolean | null
-          organization_id: string | null
-          product_id: string | null
+          organization_id: string
+          payload_generated_at: string | null
+          payload_hash: string | null
+          payload_version: number | null
+          product_id: string
+          public_payload: Json | null
           public_slug: string
           published_at: string | null
+          updated_at: string
         }
         Insert: {
           id?: string
           is_published?: boolean | null
-          organization_id?: string | null
-          product_id?: string | null
+          organization_id: string
+          payload_generated_at?: string | null
+          payload_hash?: string | null
+          payload_version?: number | null
+          product_id: string
+          public_payload?: Json | null
           public_slug: string
           published_at?: string | null
+          updated_at?: string
         }
         Update: {
           id?: string
           is_published?: boolean | null
-          organization_id?: string | null
-          product_id?: string | null
+          organization_id?: string
+          payload_generated_at?: string | null
+          payload_hash?: string | null
+          payload_version?: number | null
+          product_id?: string
+          public_payload?: Json | null
           public_slug?: string
           published_at?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -808,6 +823,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      build_public_product_passport_payload: { Args: { p_product_id: string }; Returns: Json }
+      get_public_product_passport: { Args: { p_public_slug: string }; Returns: Json }
+      publish_product_passport: {
+        Args: { p_product_id: string }
+        Returns: { payload_generated_at: string; payload_hash: string; public_slug: string; published_at: string }[]
+      }
+      rotate_product_passport_slug: { Args: { p_product_id: string }; Returns: string }
+      unpublish_product_passport: { Args: { p_product_id: string }; Returns: undefined }
       create_organization_with_admin: {
         Args: { organization_name: string }
         Returns: string
