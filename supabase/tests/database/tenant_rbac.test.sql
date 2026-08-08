@@ -132,7 +132,21 @@ SELECT lives_ok($$INSERT INTO public.supplier_invites (organization_id,supplier_
 SELECT throws_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000002','cross tenant')$$, '42501', NULL, 'admin cannot affect another tenant');
 SELECT throws_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000001'$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be demoted');
 SELECT throws_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000001'$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be deleted');
-SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','owner')$$, 'invalid roles are rejected');
+SELECT throws_ok(
+  $$INSERT INTO public.organization_members (
+      organization_id,
+      profile_id,
+      role
+    )
+    VALUES (
+      '10000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000005',
+      'owner'
+    )$$,
+  '23514',
+  NULL,
+  'invalid roles are rejected'
+);
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', true);
