@@ -306,11 +306,11 @@ export type Database = {
         }
         Update: {
           id?: string
-          is_published?: boolean | null
+          is_published?: boolean
           organization_id?: string
           payload_generated_at?: string | null
           payload_hash?: string | null
-          payload_version?: number | null
+          payload_version?: number
           product_id?: string
           public_payload?: Json | null
           public_slug?: string
