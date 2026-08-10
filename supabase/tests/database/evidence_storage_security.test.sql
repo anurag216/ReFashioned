@@ -99,7 +99,9 @@ CREATE TEMP TABLE supplier_intent AS SELECT * FROM public.create_evidence_upload
 SELECT pass('linked supplier creates own-stage intent');
 SELECT lives_ok(format('SELECT public.cancel_evidence_upload_intent(%L)',(SELECT evidence_id FROM supplier_intent)),'uploader cancels pending intent');
 SELECT is((SELECT count(*) FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM supplier_intent)),0::bigint,'cancel removes only intent record');
+RESET ROLE;
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_upload_intent_cancelled' AND entity_name=(SELECT evidence_id::text FROM supplier_intent)),1::bigint,'cancellation audited once');
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NULL)$$,(SELECT evidence_id FROM admin_intent)),'42501',NULL,'supplier cannot review evidence'); RESET ROLE;
 
 SELECT * FROM finish();
