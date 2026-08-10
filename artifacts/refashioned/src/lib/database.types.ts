@@ -147,33 +147,52 @@ export type Database = {
       }
       certifications: {
         Row: {
-          evidence_id: string | null
+          created_at: string
+          created_by: string
+          evidence_id: string
           expiry_date: string | null
           id: string
           name: string
-          organization_id: string | null
-          supplier_id: string | null
-          verification_status: string | null
+          organization_id: string
+          revoked_at: string | null
+          revoked_by: string | null
+          supplier_id: string
+          verification_status: string
         }
         Insert: {
-          evidence_id?: string | null
+          created_at?: string
+          created_by: string
+          evidence_id: string
           expiry_date?: string | null
           id?: string
           name: string
-          organization_id?: string | null
-          supplier_id?: string | null
-          verification_status?: string | null
+          organization_id: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          supplier_id: string
+          verification_status: string
         }
         Update: {
-          evidence_id?: string | null
+          created_at?: string
+          created_by?: string
+          evidence_id?: string
           expiry_date?: string | null
           id?: string
           name?: string
-          organization_id?: string | null
-          supplier_id?: string | null
-          verification_status?: string | null
+          organization_id?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          supplier_id?: string
+          verification_status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "certifications_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "certifications_evidence_id_fkey"
             columns: ["evidence_id"]
@@ -186,6 +205,13 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certifications_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -338,34 +364,73 @@ export type Database = {
         Row: {
           created_at: string | null
           document_type: string | null
-          file_url: string
           id: string
-          lifecycle_stage_id: string | null
-          organization_id: string | null
+          legacy_migrated: boolean
+          lifecycle_stage_id: string
+          mime_type: string
+          organization_id: string
+          original_filename: string
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          size_bytes: number
           status: string | null
-          supplier_id: string | null
+          storage_bucket: string
+          storage_path: string
+          superseded_at: string | null
+          superseded_by: string | null
+          supplier_id: string
+          updated_at: string
+          upload_expires_at: string | null
+          uploaded_at: string | null
           uploaded_by: string | null
         }
         Insert: {
           created_at?: string | null
           document_type?: string | null
-          file_url: string
           id?: string
-          lifecycle_stage_id?: string | null
-          organization_id?: string | null
+          legacy_migrated?: boolean
+          lifecycle_stage_id: string
+          mime_type: string
+          organization_id: string
+          original_filename: string
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          size_bytes: number
           status?: string | null
-          supplier_id?: string | null
+          storage_bucket?: string
+          storage_path: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          supplier_id: string
+          updated_at?: string
+          upload_expires_at?: string | null
+          uploaded_at?: string | null
           uploaded_by?: string | null
         }
         Update: {
           created_at?: string | null
           document_type?: string | null
-          file_url?: string
           id?: string
-          lifecycle_stage_id?: string | null
-          organization_id?: string | null
+          legacy_migrated?: boolean
+          lifecycle_stage_id?: string
+          mime_type?: string
+          organization_id?: string
+          original_filename?: string
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          size_bytes?: number
           status?: string | null
-          supplier_id?: string | null
+          storage_bucket?: string
+          storage_path?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          supplier_id?: string
+          updated_at?: string
+          upload_expires_at?: string | null
+          uploaded_at?: string | null
           uploaded_by?: string | null
         }
         Relationships: [
@@ -381,6 +446,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_uploads_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evidence_uploads_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "evidence_uploads"
             referencedColumns: ["id"]
           },
           {
@@ -401,12 +480,11 @@ export type Database = {
       }
       lifecycle_stages: {
         Row: {
-          certificate_url: string | null
           co2_impact_kg: number | null
           flagged: boolean | null
           id: string
-          organization_id: string | null
-          product_id: string | null
+          organization_id: string
+          product_id: string
           stage_name: string
           stage_order: number | null
           subtitle: string | null
@@ -414,12 +492,11 @@ export type Database = {
           water_usage_l: number | null
         }
         Insert: {
-          certificate_url?: string | null
           co2_impact_kg?: number | null
           flagged?: boolean | null
           id?: string
-          organization_id?: string | null
-          product_id?: string | null
+          organization_id: string
+          product_id: string
           stage_name: string
           stage_order?: number | null
           subtitle?: string | null
@@ -427,12 +504,11 @@ export type Database = {
           water_usage_l?: number | null
         }
         Update: {
-          certificate_url?: string | null
           co2_impact_kg?: number | null
           flagged?: boolean | null
           id?: string
-          organization_id?: string | null
-          product_id?: string | null
+          organization_id?: string
+          product_id?: string
           stage_name?: string
           stage_order?: number | null
           subtitle?: string | null
@@ -440,6 +516,20 @@ export type Database = {
           water_usage_l?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "lifecycle_stage_product_scope_fkey"
+            columns: ["product_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "lifecycle_stage_supplier_scope_fkey"
+            columns: ["supplier_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id", "organization_id"]
+          },
           {
             foreignKeyName: "lifecycle_stages_organization_id_fkey"
             columns: ["organization_id"]
@@ -827,6 +917,29 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: Json
       }
+      cancel_evidence_upload_intent: {
+        Args: { p_evidence_id: string }
+        Returns: undefined
+      }
+      create_certification_from_evidence: {
+        Args: { p_evidence_id: string; p_expiry_date: string; p_name: string }
+        Returns: string
+      }
+      create_evidence_upload_intent: {
+        Args: {
+          p_document_type: string
+          p_lifecycle_stage_id: string
+          p_mime_type: string
+          p_original_filename: string
+          p_size_bytes: number
+        }
+        Returns: {
+          bucket_id: string
+          evidence_id: string
+          storage_path: string
+          upload_expires_at: string
+        }[]
+      }
       create_organization_with_admin: {
         Args: { organization_name: string }
         Returns: string
@@ -839,11 +952,63 @@ export type Database = {
           token: string
         }[]
       }
+      current_actor_can_read_evidence_object: {
+        Args: { p_bucket: string; p_path: string }
+        Returns: boolean
+      }
+      current_actor_can_upload_evidence: {
+        Args: { p_lifecycle_stage_id: string }
+        Returns: boolean
+      }
+      finalize_evidence_upload: {
+        Args: { p_evidence_id: string }
+        Returns: undefined
+      }
+      get_evidence_download_target: {
+        Args: { p_evidence_id: string }
+        Returns: {
+          bucket_id: string
+          mime_type: string
+          original_filename: string
+          storage_path: string
+        }[]
+      }
+      get_my_organization_evidence: {
+        Args: { p_product_id?: string }
+        Returns: {
+          certification_expiry: string
+          certification_id: string
+          certification_name: string
+          certification_status: string
+          document_type: string
+          evidence_id: string
+          evidence_status: string
+          lifecycle_stage_id: string
+          original_filename: string
+          rejection_reason: string
+          reviewed_at: string
+          reviewed_by: string
+          uploaded_at: string
+          uploaded_by: string
+        }[]
+      }
       get_my_supplier_access: {
         Args: Record<PropertyKey, never>
         Returns: {
           organization_name: string
           supplier_name: string
+        }[]
+      }
+      get_my_supplier_evidence_tasks: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          document_requirement: string
+          evidence_id: string
+          evidence_status: string
+          lifecycle_stage_id: string
+          product_name: string
+          rejection_reason: string
+          stage_name: string
         }[]
       }
       get_product_passport_publication_state: {
@@ -891,6 +1056,18 @@ export type Database = {
       }
       redeem_supplier_invite: {
         Args: { p_token: string }
+        Returns: undefined
+      }
+      review_evidence_upload: {
+        Args: {
+          p_decision: string
+          p_evidence_id: string
+          p_rejection_reason?: string
+        }
+        Returns: undefined
+      }
+      revoke_certification: {
+        Args: { p_certification_id: string }
         Returns: undefined
       }
       rotate_product_passport_slug: {
