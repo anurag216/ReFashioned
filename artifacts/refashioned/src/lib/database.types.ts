@@ -707,43 +707,57 @@ export type Database = {
         }
         Relationships: []
       }
-      supplier_contacts: {
+      supplier_access_memberships: {
         Row: {
-          email: string
+          created_at: string
           id: string
-          name: string | null
-          profile_id: string | null
-          supplier_id: string | null
+          invitation_id: string | null
+          legacy_migrated: boolean
+          organization_id: string
+          profile_id: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          supplier_contact_id: string
+          supplier_id: string
         }
         Insert: {
-          email: string
+          created_at?: string
           id?: string
-          name?: string | null
-          profile_id?: string | null
-          supplier_id?: string | null
+          invitation_id?: string | null
+          legacy_migrated?: boolean
+          organization_id: string
+          profile_id: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          supplier_contact_id: string
+          supplier_id: string
         }
         Update: {
-          email?: string
+          created_at?: string
           id?: string
-          name?: string | null
-          profile_id?: string | null
-          supplier_id?: string | null
+          invitation_id?: string | null
+          legacy_migrated?: boolean
+          organization_id?: string
+          profile_id?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          supplier_contact_id?: string
+          supplier_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "supplier_contacts_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_contacts_supplier_id_fkey"
-            columns: ["supplier_id"]
-            isOneToOne: false
-            referencedRelation: "suppliers"
-            referencedColumns: ["id"]
-          },
+          { foreignKeyName: "supplier_access_contact_scope_fkey"; columns: ["supplier_contact_id", "supplier_id"]; isOneToOne: false; referencedRelation: "supplier_contacts"; referencedColumns: ["id", "supplier_id"] },
+          { foreignKeyName: "supplier_access_supplier_scope_fkey"; columns: ["supplier_id", "organization_id"]; isOneToOne: false; referencedRelation: "suppliers"; referencedColumns: ["id", "organization_id"] },
+        ]
+      }
+      supplier_contacts: {
+        Row: { email: string; id: string; name: string | null; supplier_id: string | null }
+        Insert: { email: string; id?: string; name?: string | null; supplier_id?: string | null }
+        Update: { email?: string; id?: string; name?: string | null; supplier_id?: string | null }
+        Relationships: [
+          { foreignKeyName: "supplier_contacts_supplier_id_fkey"; columns: ["supplier_id"]; isOneToOne: false; referencedRelation: "suppliers"; referencedColumns: ["id"] },
         ]
       }
       supplier_invites: {
@@ -944,6 +958,8 @@ export type Database = {
         Args: { organization_name: string }
         Returns: string
       }
+      create_supplier_contact: { Args: { p_email: string; p_name: string; p_supplier_id: string }; Returns: string }
+      delete_supplier_contact: { Args: { p_supplier_contact_id: string }; Returns: undefined }
       create_supplier_invite: {
         Args: { p_email: string; p_supplier_id: string }
         Returns: {
@@ -1054,10 +1070,17 @@ export type Database = {
           published_at: string
         }[]
       }
+      get_supplier_access_admin: {
+        Args: { p_supplier_id: string }
+        Returns: { supplier_contact_id: string; contact_name: string; contact_email: string; active_access_membership_id: string | null; access_state: string; pending_invitation_id: string | null; invitation_state: string; invitation_expires_at: string | null }[]
+      }
       redeem_supplier_invite: {
         Args: { p_token: string }
         Returns: undefined
       }
+      revoke_supplier_access: { Args: { p_access_membership_id: string; p_reason: string }; Returns: undefined }
+      revoke_supplier_invite: { Args: { p_invitation_id: string }; Returns: undefined }
+      update_supplier_contact: { Args: { p_email: string; p_name: string; p_supplier_contact_id: string }; Returns: undefined }
       review_evidence_upload: {
         Args: {
           p_decision: string

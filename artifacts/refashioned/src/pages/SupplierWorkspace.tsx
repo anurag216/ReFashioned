@@ -10,16 +10,31 @@ type Intent = { evidence_id: string; bucket_id: string; storage_path: string; up
 export function SupplierWorkspace({ access, email, onSignOut }: { access: SupplierAccess; email: string; onSignOut: () => void }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [accessRevoked, setAccessRevoked] = useState(false);
   const [uploading, setUploading] = useState<string | null>(null);
 
   async function loadTasks() {
     if (!supabase || typeof supabase.rpc !== "function") return;
     const rpc = supabase.rpc as unknown as (name: string, args?: Record<string, unknown>) => Promise<{ data: Task[] | null; error: { message: string } | null }>;
     const result = await rpc("get_my_supplier_evidence_tasks");
-    if (result.error) setError(result.error.message); else setTasks(result.data ?? []);
+    if (result.error) {
+      if (result.error.message.toLowerCase().includes("portal access is not active")) {
+        setTasks([]);
+        setAccessRevoked(true);
+      } else setError(result.error.message);
+    } else setTasks(result.data ?? []);
   }
+
   useEffect(() => { void loadTasks(); }, []);
 
+  if (accessRevoked) return <main className="min-h-screen bg-emerald-950 p-6">
+    <section className="mx-auto w-full max-w-xl rounded-2xl bg-white p-8 shadow-xl">
+      <LogOut className="h-10 w-10 text-slate-600" />
+      <h1 className="mt-4 text-2xl font-bold">Your supplier portal access is no longer active.</h1>
+      <p className="mt-2 text-sm text-muted-foreground">Contact the organization that invited you if you believe this is an error.</p>
+      <button onClick={onSignOut} className="mt-6 flex items-center gap-2 rounded-md border px-4 py-2 text-sm"><LogOut className="h-4 w-4" />Sign out</button>
+    </section>
+  </main>;
   async function upload(task: Task, file: File) {
     if (!supabase) return;
     setUploading(task.lifecycle_stage_id); setError(null);
