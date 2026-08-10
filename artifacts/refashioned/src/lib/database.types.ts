@@ -749,12 +749,15 @@ export type Database = {
         }
         Relationships: [
           { foreignKeyName: "supplier_access_contact_scope_fkey"; columns: ["supplier_contact_id", "supplier_id"]; isOneToOne: false; referencedRelation: "supplier_contacts"; referencedColumns: ["id", "supplier_id"] },
+          { foreignKeyName: "supplier_access_invitation_scope_fkey"; columns: ["invitation_id", "supplier_id", "organization_id"]; isOneToOne: false; referencedRelation: "supplier_invites"; referencedColumns: ["id", "supplier_id", "organization_id"] },
+          { foreignKeyName: "supplier_access_memberships_profile_id_fkey"; columns: ["profile_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "supplier_access_memberships_revoked_by_fkey"; columns: ["revoked_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "supplier_access_supplier_scope_fkey"; columns: ["supplier_id", "organization_id"]; isOneToOne: false; referencedRelation: "suppliers"; referencedColumns: ["id", "organization_id"] },
         ]
       }
       supplier_contacts: {
-        Row: { email: string; id: string; name: string | null; supplier_id: string | null }
-        Insert: { email: string; id?: string; name?: string | null; supplier_id?: string | null }
+        Row: { email: string; id: string; name: string | null; supplier_id: string }
+        Insert: { email: string; id?: string; name?: string | null; supplier_id: string }
         Update: { email?: string; id?: string; name?: string | null; supplier_id?: string | null }
         Relationships: [
           { foreignKeyName: "supplier_contacts_supplier_id_fkey"; columns: ["supplier_id"]; isOneToOne: false; referencedRelation: "suppliers"; referencedColumns: ["id"] },
@@ -1061,6 +1064,7 @@ export type Database = {
         Args: { target_organization_id: string }
         Returns: boolean
       }
+      is_active_supplier_for: { Args: { p_profile_id: string; p_supplier_id: string }; Returns: boolean }
       publish_product_passport: {
         Args: { p_product_id: string }
         Returns: {
@@ -1097,6 +1101,8 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: string
       }
+      supplier_identity_lock: { Args: { p_email: string; p_supplier_id: string }; Returns: undefined }
+      supplier_profile_identity_lock: { Args: { p_profile_id: string }; Returns: undefined }
       unpublish_product_passport: {
         Args: { p_product_id: string }
         Returns: undefined

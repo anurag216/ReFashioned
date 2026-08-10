@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Building, UserCheck, Clock, AlertTriangle, XCircle, RefreshCcw,
   Plus, Search, Send, CheckCircle2, X, MapPin, MoreHorizontal,
@@ -6,6 +6,19 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useSuppliers, type SupplierRow } from "../lib/api/useSuppliers";
+import { useAuthUserId } from "../lib/auth/AuthUserContext";
+import { useCurrentMembership } from "../lib/auth/useCurrentMembership";
+
+type SupplierAccessAdminRow = {
+  supplier_contact_id: string | null;
+  contact_name: string | null;
+  contact_email: string;
+  active_access_membership_id: string | null;
+  access_state: string;
+  pending_invitation_id: string | null;
+  invitation_state: string;
+  invitation_expires_at: string | null;
+};
 
 export function SupplierPortal() {
   const [activeFilter, setActiveFilter] = useState("all");
@@ -22,9 +35,44 @@ export function SupplierPortal() {
   const [addForm, setAddForm] = useState({ name: "", location: "", tier: "1", status: "active" as "active" | "inactive" | "under_review" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [accessRows, setAccessRows] = useState<SupplierAccessAdminRow[]>([]);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [revocationReason, setRevocationReason] = useState("");
+  const userId = useAuthUserId();
+  const { data: membership } = useCurrentMembership(userId);
+  const isAdmin = membership?.role === "admin";
 
   const { data: suppliers = [], isLoading: loading, error: fetchErrorObj, refetch } = useSuppliers();
   const fetchError = fetchErrorObj instanceof Error ? fetchErrorObj.message : null;
+
+  async function loadAccessAdmin(supplierId: string) {
+    if (!supabase) return;
+    setAccessLoading(true); setAccessError(null);
+    const { data, error } = await supabase.rpc("get_supplier_access_admin", { p_supplier_id: supplierId });
+    if (error) setAccessError(error.code === "42501" ? "You are not authorized to view this supplier's portal access." : "Unable to load supplier portal access.");
+    else setAccessRows((data ?? []) as SupplierAccessAdminRow[]);
+    setAccessLoading(false);
+  }
+
+  useEffect(() => { if (selectedSupplierId) void loadAccessAdmin(selectedSupplierId); }, [selectedSupplierId]);
+
+  async function revokeInvitation(invitationId: string) {
+    if (!supabase || !selectedSupplierId) return;
+    const { error } = await supabase.rpc("revoke_supplier_invite", { p_invitation_id: invitationId });
+    if (error) setAccessError(error.code === "42501" ? "You are not authorized to revoke this invitation." : error.message);
+    else await loadAccessAdmin(selectedSupplierId);
+  }
+
+  async function revokeAccess(membershipId: string) {
+    if (!supabase || !selectedSupplierId) return;
+    const reason = revocationReason.trim();
+    if (reason.length < 3) { setAccessError("Enter a meaningful revocation reason."); return; }
+    const { error } = await supabase.rpc("revoke_supplier_access", { p_access_membership_id: membershipId, p_reason: reason });
+    if (error) setAccessError(error.code === "42501" ? "You are not authorized to revoke this access." : error.message);
+    else { setRevocationReason(""); await loadAccessAdmin(selectedSupplierId); }
+  }
 
   const statusConfig: Record<SupplierRow["status"], { label: string; color: string; bg: string; border: string; dot: string }> = {
     "active":       { label: "Active",        color: "text-green-700",  bg: "bg-green-50",  border: "border-green-200",  dot: "bg-green-500"  },
@@ -124,7 +172,9 @@ export function SupplierPortal() {
     const { data, error: inviteRpcError } = await client.rpc("create_supplier_invite", { p_supplier_id: inviteForm.supplierId, p_email: inviteForm.email });
     const invite = data?.[0];
     if (inviteRpcError || !invite?.token) {
-      setInviteError(inviteRpcError?.code === "42501" ? "Only organization administrators can invite suppliers." : "Failed to create a secure invitation.");
+      setInviteError(inviteRpcError?.message?.includes("already has active portal access")
+        ? "This supplier contact already has portal access."
+        : inviteRpcError?.code === "42501" ? "Only organization administrators can invite suppliers." : "Failed to create a secure invitation.");
       setInviteSending(false);
       return;
     }
@@ -149,13 +199,13 @@ export function SupplierPortal() {
           >
             <Plus className="w-4 h-4" /> Add Supplier
           </button>
-          <button
+          {isAdmin && <button
             data-testid="button-invite-supplier"
             onClick={() => setShowInviteModal(true)}
             className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
           >
             <Send className="w-4 h-4" /> Invite
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -299,7 +349,7 @@ export function SupplierPortal() {
                     {/* Action */}
                     <div className="flex items-center gap-2 shrink-0">
                       {s.status === "active" && (
-                        <button className="text-xs text-primary font-medium hover:text-primary/80 transition-colors px-3 py-1.5 border border-primary/30 rounded-md hover:bg-primary/5">
+                        <button onClick={() => setSelectedSupplierId(String(s.id))} className="text-xs text-primary font-medium hover:text-primary/80 transition-colors px-3 py-1.5 border border-primary/30 rounded-md hover:bg-primary/5">
                           View
                         </button>
                       )}
@@ -313,7 +363,7 @@ export function SupplierPortal() {
                           <Send className="w-3 h-3" /> Remind
                         </button>
                       )}
-                      {s.status === "not-invited" && (
+                      {s.status === "not-invited" && isAdmin && (
                         <button
                           onClick={() => { setInviteForm(f => ({ ...f, company: s.name, tier: String(s.tier) })); setShowInviteModal(true); }}
                           className="text-xs text-primary font-medium hover:text-primary/80 transition-colors px-3 py-1.5 border border-primary/30 rounded-md hover:bg-primary/5 flex items-center gap-1"
@@ -321,7 +371,7 @@ export function SupplierPortal() {
                           <Plus className="w-3 h-3" /> Invite
                         </button>
                       )}
-                      <button className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors">
+                      <button aria-label={`Manage portal access for ${s.name}`} onClick={() => setSelectedSupplierId(String(s.id))} className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors">
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                     </div>
@@ -332,6 +382,38 @@ export function SupplierPortal() {
           </div>
         ) : null}
       </div>
+
+      {selectedSupplierId && <section aria-label="Supplier portal access" className="bg-card rounded-xl shadow-sm border border-card-border p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div><h2 className="font-semibold">Portal access</h2><p className="text-xs text-muted-foreground">Manage verified access and pending invitations for this supplier.</p></div>
+          <button onClick={() => setSelectedSupplierId(null)} className="rounded p-2 hover:bg-muted" aria-label="Close portal access"><X className="h-4 w-4" /></button>
+        </div>
+        {accessLoading && <p className="mt-4 text-sm text-muted-foreground">Loading portal access…</p>}
+        {accessError && <p role="alert" className="mt-4 rounded bg-red-50 p-3 text-sm text-red-800">{accessError}</p>}
+        {!accessLoading && accessRows.length === 0 && <p className="mt-4 text-sm text-muted-foreground">No supplier contacts or pending invitations.</p>}
+        <div className="mt-4 space-y-3">
+          {accessRows.map((row, index) => <div key={`${row.contact_email}-${index}`} className="rounded-lg border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{row.contact_name ?? "Pending contact"}</p>
+                <p className="text-sm text-muted-foreground">{row.contact_email}</p>
+                <div className="mt-2 flex gap-2 text-xs">
+                  <span className="rounded-full bg-slate-100 px-2 py-1">Access: {row.access_state}</span>
+                  <span className="rounded-full bg-slate-100 px-2 py-1">Invitation: {row.invitation_state}</span>
+                </div>
+                {row.invitation_expires_at && <p className="mt-2 text-xs text-muted-foreground">Expires {new Date(row.invitation_expires_at).toLocaleString()}</p>}
+              </div>
+              {isAdmin && <div className="flex flex-col items-end gap-2">
+                {row.pending_invitation_id && <button onClick={() => void revokeInvitation(row.pending_invitation_id!)} className="rounded border border-red-200 px-3 py-1 text-xs text-red-700">Revoke invitation</button>}
+                {row.active_access_membership_id && <>
+                  <input aria-label="Access revocation reason" value={revocationReason} onChange={event => setRevocationReason(event.target.value)} placeholder="Revocation reason" className="rounded border px-3 py-1 text-xs" />
+                  <button onClick={() => void revokeAccess(row.active_access_membership_id!)} className="rounded border border-red-200 px-3 py-1 text-xs text-red-700">Revoke access</button>
+                </>}
+              </div>}
+            </div>
+          </div>)}
+        </div>
+      </section>}
 
       {/* Onboarding checklist summary */}
       <div className="bg-card rounded-xl shadow-sm border border-card-border p-6">

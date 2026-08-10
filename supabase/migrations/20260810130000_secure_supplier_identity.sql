@@ -1,5 +1,56 @@
 -- Separate supplier contact metadata from the server-controlled portal identity.
 
+-- Canonicalize every identity-bearing contact and invitation before adding stricter
+-- constraints. Abort with the offending row instead of guessing how to merge it.
+DO $$
+DECLARE bad record;
+BEGIN
+  SELECT c.id, CASE
+    WHEN c.supplier_id IS NULL THEN 'supplier is missing'
+    WHEN s.id IS NULL THEN 'supplier does not exist'
+    WHEN c.email IS NULL OR btrim(c.email) = '' THEN 'email is missing'
+    WHEN length(btrim(c.email)) > 254 OR lower(btrim(c.email)) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN 'email is invalid'
+    WHEN count(*) OVER (PARTITION BY c.supplier_id,lower(btrim(c.email))) > 1 THEN 'normalized supplier/email is duplicated'
+  END reason INTO bad
+  FROM public.supplier_contacts c LEFT JOIN public.suppliers s ON s.id=c.supplier_id
+  WHERE c.supplier_id IS NULL OR s.id IS NULL OR c.email IS NULL OR btrim(c.email)=''
+    OR length(btrim(c.email))>254 OR lower(btrim(c.email)) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+    OR EXISTS (SELECT 1 FROM public.supplier_contacts d WHERE d.id<>c.id AND d.supplier_id=c.supplier_id AND lower(btrim(d.email))=lower(btrim(c.email)))
+  ORDER BY c.id LIMIT 1;
+  IF FOUND THEN RAISE EXCEPTION 'unsafe supplier contact %: %',bad.id,bad.reason; END IF;
+
+  SELECT i.id, CASE
+    WHEN s.id IS NULL THEN 'supplier does not exist'
+    WHEN o.id IS NULL THEN 'organization does not exist'
+    WHEN i.organization_id IS DISTINCT FROM s.organization_id THEN 'organization does not match supplier'
+    WHEN i.email IS NULL OR btrim(i.email)='' THEN 'email is missing'
+    WHEN length(btrim(i.email))>254 OR lower(btrim(i.email)) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN 'email is invalid'
+    ELSE 'usable normalized supplier/email is duplicated' END reason INTO bad
+  FROM public.supplier_invites i
+  LEFT JOIN public.suppliers s ON s.id=i.supplier_id LEFT JOIN public.organizations o ON o.id=i.organization_id
+  WHERE s.id IS NULL OR o.id IS NULL OR i.organization_id IS DISTINCT FROM s.organization_id
+    OR i.email IS NULL OR btrim(i.email)='' OR length(btrim(i.email))>254
+    OR lower(btrim(i.email)) !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+    OR (i.redeemed_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>now() AND EXISTS (
+      SELECT 1 FROM public.supplier_invites d WHERE d.id<>i.id AND d.supplier_id=i.supplier_id
+      AND lower(btrim(d.email))=lower(btrim(i.email)) AND d.redeemed_at IS NULL AND d.revoked_at IS NULL AND d.expires_at>now()))
+  ORDER BY i.id LIMIT 1;
+  IF FOUND THEN RAISE EXCEPTION 'unsafe supplier invitation %: %',bad.id,bad.reason; END IF;
+END $$;
+
+UPDATE public.supplier_contacts SET email=lower(btrim(email));
+UPDATE public.supplier_invites SET email=lower(btrim(email));
+ALTER TABLE public.supplier_contacts ALTER COLUMN supplier_id SET NOT NULL;
+DROP INDEX IF EXISTS public.supplier_contacts_supplier_email_uidx;
+CREATE UNIQUE INDEX supplier_contacts_supplier_email_uidx ON public.supplier_contacts(supplier_id,email);
+ALTER TABLE public.supplier_contacts ADD CONSTRAINT supplier_contacts_email_canonical_check
+  CHECK (email=lower(btrim(email)) AND length(email)<=254 AND email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$');
+ALTER TABLE public.supplier_invites ADD CONSTRAINT supplier_invites_email_canonical_check
+  CHECK (email=lower(btrim(email)) AND length(email)<=254 AND email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$');
+ALTER TABLE public.supplier_invites ADD CONSTRAINT supplier_invites_id_supplier_organization_key UNIQUE(id,supplier_id,organization_id);
+ALTER TABLE public.supplier_invites ADD CONSTRAINT supplier_invites_supplier_scope_fkey
+  FOREIGN KEY(supplier_id,organization_id) REFERENCES public.suppliers(id,organization_id);
+
 ALTER TABLE public.supplier_contacts
   ADD CONSTRAINT supplier_contacts_id_supplier_id_key UNIQUE (id, supplier_id);
 
@@ -9,7 +60,7 @@ CREATE TABLE public.supplier_access_memberships (
   supplier_id uuid NOT NULL,
   supplier_contact_id uuid NOT NULL,
   profile_id uuid NOT NULL REFERENCES public.profiles(id),
-  invitation_id uuid REFERENCES public.supplier_invites(id),
+  invitation_id uuid,
   legacy_migrated boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
   revoked_at timestamptz,
@@ -21,6 +72,9 @@ CREATE TABLE public.supplier_access_memberships (
   CONSTRAINT supplier_access_contact_scope_fkey
     FOREIGN KEY (supplier_contact_id, supplier_id)
     REFERENCES public.supplier_contacts(id, supplier_id),
+  CONSTRAINT supplier_access_invitation_scope_fkey
+    FOREIGN KEY (invitation_id,supplier_id,organization_id)
+    REFERENCES public.supplier_invites(id,supplier_id,organization_id),
   CONSTRAINT supplier_access_provenance_check CHECK (
     (legacy_migrated AND invitation_id IS NULL) OR
     (NOT legacy_migrated AND invitation_id IS NOT NULL)
@@ -92,11 +146,22 @@ REVOKE ALL ON FUNCTION public.supplier_identity_lock(uuid,text) FROM PUBLIC,anon
 
 CREATE OR REPLACE FUNCTION public.validate_supplier_contact_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_old_email text:=lower(btrim(OLD.email)); v_new_email text;
 BEGIN
   IF TG_OP='UPDATE' AND NEW.supplier_id IS DISTINCT FROM OLD.supplier_id THEN
     RAISE EXCEPTION 'supplier contact supplier is immutable';
   END IF;
-  IF TG_OP IN ('UPDATE','DELETE') AND (TG_OP='DELETE' OR lower(btrim(NEW.email)) IS DISTINCT FROM lower(btrim(OLD.email))) THEN
+  v_new_email:=CASE WHEN TG_OP='DELETE' THEN v_old_email ELSE lower(btrim(NEW.email)) END;
+  IF TG_OP='DELETE' OR v_new_email IS DISTINCT FROM v_old_email THEN
+    -- Invitation operations use this exact lock. On a rename, acquire both keys
+    -- in lexical order so opposite renames cannot deadlock.
+    IF v_old_email<=v_new_email THEN
+      PERFORM public.supplier_identity_lock(OLD.supplier_id,v_old_email);
+      IF v_new_email<>v_old_email THEN PERFORM public.supplier_identity_lock(OLD.supplier_id,v_new_email); END IF;
+    ELSE
+      PERFORM public.supplier_identity_lock(OLD.supplier_id,v_new_email);
+      PERFORM public.supplier_identity_lock(OLD.supplier_id,v_old_email);
+    END IF;
     IF EXISTS (SELECT 1 FROM public.supplier_access_memberships a WHERE a.supplier_contact_id=OLD.id AND a.revoked_at IS NULL) THEN
       RAISE EXCEPTION 'revoke active supplier access before changing or deleting this contact' USING ERRCODE='55000';
     END IF;
@@ -113,23 +178,49 @@ CREATE TRIGGER validate_supplier_contact_change_trigger
 BEFORE UPDATE OR DELETE ON public.supplier_contacts FOR EACH ROW
 EXECUTE FUNCTION public.validate_supplier_contact_change();
 
+CREATE OR REPLACE FUNCTION public.supplier_profile_identity_lock(p_profile_id uuid)
+RETURNS void LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT pg_advisory_xact_lock(hashtextextended('supplier-profile:'||p_profile_id::text,0))
+$$;
+REVOKE ALL ON FUNCTION public.supplier_profile_identity_lock(uuid) FROM PUBLIC,anon,authenticated;
+
 CREATE OR REPLACE FUNCTION public.prevent_dual_identity()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_profile uuid:=CASE WHEN TG_OP='DELETE' THEN OLD.profile_id ELSE NEW.profile_id END;
 BEGIN
+  PERFORM public.supplier_profile_identity_lock(v_profile);
   IF TG_TABLE_NAME='organization_members' THEN
-    IF EXISTS (SELECT 1 FROM public.supplier_access_memberships a WHERE a.profile_id=NEW.profile_id AND a.revoked_at IS NULL) THEN
+    IF TG_OP<>'DELETE' AND EXISTS (SELECT 1 FROM public.supplier_access_memberships a WHERE a.profile_id=v_profile AND a.revoked_at IS NULL) THEN
       RAISE EXCEPTION 'revoke supplier access before adding an internal membership' USING ERRCODE='23514';
     END IF;
-  ELSIF NEW.revoked_at IS NULL AND EXISTS (SELECT 1 FROM public.organization_members m WHERE m.profile_id=NEW.profile_id) THEN
+  ELSIF TG_OP<>'DELETE' AND NEW.revoked_at IS NULL AND EXISTS (SELECT 1 FROM public.organization_members m WHERE m.profile_id=v_profile) THEN
     RAISE EXCEPTION 'remove internal membership before granting supplier access' USING ERRCODE='23514';
   END IF;
-  RETURN NEW;
+  RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
 END $$;
 REVOKE ALL ON FUNCTION public.prevent_dual_identity() FROM PUBLIC,anon,authenticated;
 CREATE TRIGGER organization_members_no_supplier_identity
-BEFORE INSERT OR UPDATE OF profile_id ON public.organization_members FOR EACH ROW EXECUTE FUNCTION public.prevent_dual_identity();
+BEFORE INSERT OR DELETE OR UPDATE OF profile_id ON public.organization_members FOR EACH ROW EXECUTE FUNCTION public.prevent_dual_identity();
 CREATE TRIGGER supplier_access_no_internal_identity
-BEFORE INSERT OR UPDATE OF profile_id,revoked_at ON public.supplier_access_memberships FOR EACH ROW EXECUTE FUNCTION public.prevent_dual_identity();
+BEFORE INSERT OR DELETE OR UPDATE OF profile_id,revoked_at ON public.supplier_access_memberships FOR EACH ROW EXECUTE FUNCTION public.prevent_dual_identity();
+
+CREATE OR REPLACE FUNCTION public.validate_supplier_access_provenance()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v record;
+BEGIN
+ IF NEW.legacy_migrated THEN RETURN NEW; END IF;
+ SELECT i.email,i.redeemed_by,i.redeemed_at,i.status,c.email contact_email INTO v
+ FROM public.supplier_invites i JOIN public.supplier_contacts c ON c.id=NEW.supplier_contact_id
+ WHERE (i.id,i.supplier_id,i.organization_id)=(NEW.invitation_id,NEW.supplier_id,NEW.organization_id);
+ IF NOT FOUND OR v.email IS DISTINCT FROM v.contact_email OR v.redeemed_by IS DISTINCT FROM NEW.profile_id
+   OR v.redeemed_at IS NULL OR v.status IS DISTINCT FROM 'redeemed' THEN
+   RAISE EXCEPTION 'supplier access requires a matching redeemed invitation' USING ERRCODE='23514';
+ END IF;
+ RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.validate_supplier_access_provenance() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER validate_supplier_access_provenance_trigger BEFORE INSERT OR UPDATE OF invitation_id,supplier_id,organization_id,supplier_contact_id,profile_id,legacy_migrated
+ON public.supplier_access_memberships FOR EACH ROW EXECUTE FUNCTION public.validate_supplier_access_provenance();
 
 CREATE OR REPLACE FUNCTION public.create_supplier_contact(p_supplier_id uuid,p_name text,p_email text)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,extensions AS $$
@@ -211,8 +302,8 @@ BEGIN
   ELSIF EXISTS(SELECT 1 FROM public.supplier_access_memberships WHERE supplier_contact_id=v_contact.id AND revoked_at IS NULL) THEN
     RAISE EXCEPTION 'supplier contact already has active portal access' USING ERRCODE='55000';
   END IF;
-  INSERT INTO public.supplier_access_memberships(organization_id,supplier_id,supplier_contact_id,profile_id,invitation_id) VALUES(v.organization_id,v.supplier_id,v_contact.id,v_actor,v.id);
   UPDATE public.supplier_invites SET redeemed_at=now(),redeemed_by=v_actor,status='redeemed' WHERE id=v.id;
+  INSERT INTO public.supplier_access_memberships(organization_id,supplier_id,supplier_contact_id,profile_id,invitation_id) VALUES(v.organization_id,v.supplier_id,v_contact.id,v_actor,v.id);
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'supplier_invite_redeemed','supplier_invite',v.id::text);
 END $$;
 
@@ -233,7 +324,7 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.revoke_supplier_access(p_access_membership_id uuid,p_reason text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE v_actor uuid:=auth.uid(); v_reason text:=regexp_replace(btrim(p_reason),'[[:space:]]+',' ','g'); v record; v_email text;
+DECLARE v_actor uuid:=auth.uid(); v_reason text:=regexp_replace(btrim(p_reason),'[[:space:]]+',' ','g'); v record; v_invite record;
 BEGIN
   IF v_reason IS NULL OR length(v_reason) NOT BETWEEN 3 AND 500 THEN RAISE EXCEPTION 'revocation reason must be 3 to 500 characters' USING ERRCODE='22023'; END IF;
   SELECT a.*,c.email INTO v FROM public.supplier_access_memberships a JOIN public.supplier_contacts c ON c.id=a.supplier_contact_id WHERE a.id=p_access_membership_id;
@@ -243,7 +334,12 @@ BEGIN
   IF v_actor IS NULL OR NOT EXISTS(SELECT 1 FROM public.organization_members WHERE profile_id=v_actor AND organization_id=v.organization_id AND role='admin') THEN RAISE EXCEPTION 'active supplier access not found or not authorized' USING ERRCODE='42501'; END IF;
   IF v.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'supplier access was already revoked'; END IF;
   UPDATE public.supplier_access_memberships SET revoked_at=now(),revoked_by=v_actor,revocation_reason=v_reason WHERE id=v.id;
-  UPDATE public.supplier_invites SET revoked_at=now(),status='revoked' WHERE supplier_id=v.supplier_id AND lower(btrim(email))=lower(btrim(v.email)) AND redeemed_at IS NULL AND revoked_at IS NULL;
+  FOR v_invite IN UPDATE public.supplier_invites SET revoked_at=now(),status='revoked'
+    WHERE supplier_id=v.supplier_id AND email=v.email AND redeemed_at IS NULL AND revoked_at IS NULL
+    RETURNING id LOOP
+    INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name)
+      VALUES(v.organization_id,v_actor,'supplier_invite_revoked_with_access','supplier_invite',v_invite.id::text);
+  END LOOP;
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'supplier_access_revoked','supplier_access_membership',v.id::text);
 END $$;
 
@@ -263,12 +359,19 @@ DECLARE v_org uuid;
 BEGIN
  SELECT organization_id INTO v_org FROM public.suppliers WHERE id=p_supplier_id;
  IF auth.uid() IS NULL OR v_org IS NULL OR NOT EXISTS(SELECT 1 FROM public.organization_members WHERE profile_id=auth.uid() AND organization_id=v_org) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
- RETURN QUERY SELECT c.id,c.name,c.email,a.id,CASE WHEN a.id IS NULL THEN 'inactive' ELSE 'active' END,
+ RETURN QUERY WITH identities AS (
+   SELECT c.id contact_id,c.name,c.email FROM public.supplier_contacts c WHERE c.supplier_id=p_supplier_id
+   UNION ALL
+   SELECT NULL::uuid,NULL::text,i.email FROM public.supplier_invites i
+   WHERE i.supplier_id=p_supplier_id AND i.redeemed_at IS NULL AND i.revoked_at IS NULL
+     AND NOT EXISTS(SELECT 1 FROM public.supplier_contacts c WHERE c.supplier_id=i.supplier_id AND c.email=i.email)
+ )
+ SELECT x.contact_id,x.name,x.email,a.id,CASE WHEN a.id IS NULL THEN 'inactive' ELSE 'active' END,
    i.id,CASE WHEN i.id IS NULL THEN 'none' WHEN i.expires_at<=now() THEN 'expired' ELSE 'pending' END,i.expires_at
- FROM public.supplier_contacts c
- LEFT JOIN public.supplier_access_memberships a ON a.supplier_contact_id=c.id AND a.revoked_at IS NULL
- LEFT JOIN LATERAL (SELECT x.id,x.expires_at FROM public.supplier_invites x WHERE x.supplier_id=c.supplier_id AND lower(btrim(x.email))=lower(btrim(c.email)) AND x.redeemed_at IS NULL AND x.revoked_at IS NULL ORDER BY x.created_at DESC LIMIT 1)i ON true
- WHERE c.supplier_id=p_supplier_id ORDER BY c.name,c.email;
+ FROM identities x
+ LEFT JOIN public.supplier_access_memberships a ON a.supplier_contact_id=x.contact_id AND a.revoked_at IS NULL
+ LEFT JOIN LATERAL (SELECT q.id,q.expires_at FROM public.supplier_invites q WHERE q.supplier_id=p_supplier_id AND q.email=x.email AND q.redeemed_at IS NULL AND q.revoked_at IS NULL ORDER BY q.created_at DESC LIMIT 1)i ON true
+ ORDER BY x.name NULLS LAST,x.email;
 END $$;
 
 -- Replace every evidence authorization branch with an active membership lookup.
