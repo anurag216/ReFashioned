@@ -335,7 +335,7 @@ BEGIN
   IF v.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'supplier access was already revoked'; END IF;
   UPDATE public.supplier_access_memberships SET revoked_at=now(),revoked_by=v_actor,revocation_reason=v_reason WHERE id=v.id;
   FOR v_invite IN UPDATE public.supplier_invites SET revoked_at=now(),status='revoked'
-    WHERE supplier_id=v.supplier_id AND email=v.email AND redeemed_at IS NULL AND revoked_at IS NULL
+    WHERE supplier_id=v.supplier_id AND email=v.email AND redeemed_at IS NULL AND revoked_at IS NULL AND expires_at>now()
     RETURNING id LOOP
     INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name)
       VALUES(v.organization_id,v_actor,'supplier_invite_revoked_with_access','supplier_invite',v_invite.id::text);

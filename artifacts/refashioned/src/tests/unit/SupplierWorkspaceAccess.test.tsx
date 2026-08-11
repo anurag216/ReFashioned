@@ -41,4 +41,20 @@ describe("Supplier Workspace access revocation", () => {
     expect(await screen.findByText("Your supplier portal access is no longer active.")).toBeInTheDocument();
     await waitFor(() => expect(mocks.upload).not.toHaveBeenCalled());
   });
+
+  it("moves to revoked state when finalization authorization is lost", async () => {
+    mocks.upload.mockResolvedValue({ error: null });
+    mocks.rpc.mockImplementation((name: string) => {
+      if (name === "get_my_supplier_evidence_tasks") return Promise.resolve({ data: [task], error: null });
+      if (name === "create_evidence_upload_intent") return Promise.resolve({ data: [{ evidence_id: "evidence-secret", bucket_id: "compliance_docs", storage_path: "private-secret", upload_expires_at: "2030-01-01" }], error: null });
+      return Promise.resolve({ data: null, error: { message: "authorization is no longer valid" } });
+    });
+    const { container } = render(<SupplierWorkspace {...props} />); await screen.findByText(/Shirt/);
+    fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [new File(["pdf"], "proof.pdf", { type: "application/pdf" })] } });
+    expect(await screen.findByText("Your supplier portal access is no longer active.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("stage-secret");
+    expect(document.body).not.toHaveTextContent("evidence-secret");
+    expect(document.body).not.toHaveTextContent("private-secret");
+  });
 });
