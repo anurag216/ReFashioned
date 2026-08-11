@@ -27,7 +27,20 @@ SELECT is(has_table_privilege('authenticated','public.supplier_access_membership
 SELECT is(has_table_privilege('authenticated','public.supplier_contacts','INSERT'),false,'authenticated cannot directly insert contacts');
 SELECT is(has_table_privilege('authenticated','public.supplier_contacts','UPDATE'),false,'authenticated cannot directly update contacts');
 
-SELECT like(pg_get_functiondef('public.prevent_dual_identity()'::regprocedure),'%supplier_profile_identity_lock%','both identity tables use the shared profile lock');
+SELECT ok(
+  position(
+    'supplier_profile_identity_lock'
+    in regexp_replace(
+      pg_get_functiondef(
+        'public.prevent_dual_identity()'::regprocedure
+      ),
+      '[[:space:]]+',
+      ' ',
+      'g'
+    )
+  ) > 0,
+  'both identity tables use the shared profile lock'
+);
 SELECT ok(
   position('supplier_identity_lock' in regexp_replace(pg_get_functiondef('public.create_supplier_contact(uuid,text,text)'::regprocedure),'[[:space:]]+',' ','g'))>0
   AND position('supplier_identity_lock' in regexp_replace(pg_get_functiondef('public.update_supplier_contact(uuid,text,text)'::regprocedure),'[[:space:]]+',' ','g'))>0
