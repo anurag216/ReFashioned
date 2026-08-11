@@ -1039,6 +1039,10 @@ export type Database = {
         Args: { p_lifecycle_stage_id: string }
         Returns: boolean
       }
+      current_actor_is_active_supplier_for: {
+        Args: { p_supplier_id: string }
+        Returns: boolean
+      }
       delete_supplier_contact: {
         Args: { p_supplier_contact_id: string }
         Returns: undefined
@@ -1333,4 +1337,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

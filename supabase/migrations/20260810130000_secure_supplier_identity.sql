@@ -393,9 +393,18 @@ BEGIN
  RETURN QUERY SELECT s.id,s.stage_name,p.name,'Evidence document'::text,e.status,e.id,e.rejection_reason FROM public.supplier_access_memberships a JOIN public.suppliers su ON su.id=a.supplier_id JOIN public.lifecycle_stages s ON (s.supplier_id,s.organization_id)=(su.id,su.organization_id) JOIN public.products p ON (p.id,p.organization_id)=(s.product_id,s.organization_id) LEFT JOIN LATERAL (SELECT x.id,x.status,x.rejection_reason FROM public.evidence_uploads x WHERE x.lifecycle_stage_id=s.id ORDER BY x.created_at DESC LIMIT 1)e ON true WHERE a.profile_id=auth.uid() AND a.revoked_at IS NULL AND p.status<>'archived';
 END $$;
 
+CREATE OR REPLACE FUNCTION public.current_actor_is_active_supplier_for(p_supplier_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+ SELECT auth.uid() IS NOT NULL AND EXISTS(
+   SELECT 1 FROM public.supplier_access_memberships a
+   WHERE a.profile_id=auth.uid() AND a.supplier_id=p_supplier_id AND a.revoked_at IS NULL)
+$$;
+REVOKE ALL ON FUNCTION public.current_actor_is_active_supplier_for(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.current_actor_is_active_supplier_for(uuid) TO authenticated;
+
 DROP POLICY IF EXISTS evidence_supplier_select ON public.evidence_uploads;
 CREATE POLICY evidence_supplier_select ON public.evidence_uploads FOR SELECT TO authenticated USING
- (EXISTS(SELECT 1 FROM public.supplier_access_memberships a WHERE a.profile_id=auth.uid() AND a.supplier_id=supplier_id AND a.revoked_at IS NULL));
+ (public.current_actor_is_active_supplier_for(supplier_id));
 
 CREATE OR REPLACE FUNCTION public.create_evidence_upload_intent(p_lifecycle_stage_id uuid,p_document_type text,p_original_filename text,p_mime_type text,p_size_bytes bigint)
 RETURNS TABLE(evidence_id uuid,bucket_id text,storage_path text,upload_expires_at timestamptz)

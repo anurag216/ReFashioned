@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(102);
+SELECT plan(106);
 
 SELECT has_table('public','supplier_access_memberships','supplier access membership table exists');
 SELECT hasnt_column('public','supplier_contacts','profile_id','contact metadata is not an authorization credential');
@@ -8,7 +8,13 @@ SELECT has_column('public','supplier_access_memberships','revocation_reason','me
 SELECT has_index('public','supplier_access_memberships','supplier_access_active_profile_uidx','active profiles are unique');
 SELECT has_index('public','supplier_access_memberships','supplier_access_active_contact_uidx','active contacts are unique');
 SELECT has_index('public','supplier_access_memberships','supplier_access_invitation_uidx','an invitation has one membership');
-SELECT has_check('public','supplier_access_memberships','supplier_access_provenance_check','membership provenance is enforced');
+SELECT ok(EXISTS(
+  SELECT 1 FROM pg_catalog.pg_constraint c
+  JOIN pg_catalog.pg_class t ON t.oid=c.conrelid
+  JOIN pg_catalog.pg_namespace n ON n.oid=t.relnamespace
+  WHERE n.nspname='public' AND t.relname='supplier_access_memberships'
+    AND c.conname='supplier_access_provenance_check' AND c.contype='c'
+),'membership provenance is enforced');
 SELECT has_function('public','create_supplier_contact',ARRAY['uuid','text','text'],'contact creation uses a secured RPC');
 SELECT has_function('public','update_supplier_contact',ARRAY['uuid','text','text'],'contact update uses a secured RPC');
 SELECT has_function('public','delete_supplier_contact',ARRAY['uuid'],'contact deletion uses a secured RPC');
@@ -17,6 +23,7 @@ SELECT has_function('public','revoke_supplier_access',ARRAY['uuid','text'],'supp
 SELECT has_function('public','get_supplier_access_admin',ARRAY['uuid'],'safe access administration RPC exists');
 SELECT is(has_table_privilege('authenticated','public.supplier_access_memberships','INSERT'),false,'authenticated cannot insert memberships');
 SELECT is(has_table_privilege('authenticated','public.supplier_access_memberships','UPDATE'),false,'authenticated cannot update memberships');
+SELECT is(has_table_privilege('authenticated','public.supplier_access_memberships','SELECT'),false,'authenticated cannot directly select memberships');
 SELECT is(has_table_privilege('authenticated','public.supplier_contacts','INSERT'),false,'authenticated cannot directly insert contacts');
 SELECT is(has_table_privilege('authenticated','public.supplier_contacts','UPDATE'),false,'authenticated cannot directly update contacts');
 
@@ -142,6 +149,8 @@ SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000004'
 SELECT is((SELECT count(*) FROM public.get_my_supplier_access()),1::bigint,'active supplier receives workspace access');
 SELECT lives_ok($$SELECT * FROM public.get_my_supplier_evidence_tasks()$$,'active supplier receives evidence tasks');
 SELECT is(public.current_actor_can_upload_evidence('b5000000-0000-0000-0000-000000000001'),true,'active supplier has upload authorization');
+SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-000000000001'),true,'current actor helper recognizes own active supplier');
+SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-000000000002'),false,'current actor helper rejects another supplier');
 CREATE TEMP TABLE identity_intent AS SELECT * FROM public.create_evidence_upload_intent('b5000000-0000-0000-0000-000000000001','certificate','identity.pdf','application/pdf',80);
 SELECT pass('active supplier creates an evidence intent'); RESET ROLE;
 UPDATE public.evidence_uploads SET status='pending_review',uploaded_at=now(),upload_expires_at=NULL WHERE id=(SELECT evidence_id FROM identity_intent);
@@ -180,6 +189,7 @@ SELECT is((SELECT count(*) FROM public.get_my_supplier_access()),0::bigint,'revo
 SELECT throws_ok($$SELECT * FROM public.get_my_supplier_evidence_tasks()$$,'42501','supplier portal access is not active','revoked supplier task query is denied');
 SELECT throws_ok($$SELECT * FROM public.create_evidence_upload_intent('b5000000-0000-0000-0000-000000000001','certificate','revoked.pdf','application/pdf',80)$$,'42501','not authorized','revoked supplier cannot create evidence intent');
 SELECT is(public.current_actor_can_upload_evidence('b5000000-0000-0000-0000-000000000001'),false,'revoked supplier loses upload authorization');
+SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-000000000001'),false,'current actor helper rejects revoked supplier');
 SELECT is((SELECT count(*) FROM storage.objects WHERE name=(SELECT storage_path FROM identity_intent)),0::bigint,'revoked supplier cannot select Storage evidence');
 SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM identity_intent))),0::bigint,'revoked supplier receives no evidence download target'); RESET ROLE;
 SELECT is((SELECT count(*) FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM identity_intent)),1::bigint,'historical evidence remains after access revocation');
