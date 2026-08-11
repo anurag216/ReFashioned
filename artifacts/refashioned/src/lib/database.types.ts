@@ -1195,11 +1195,7 @@ export type Database = {
         Returns: undefined
       }
       update_supplier_contact: {
-        Args: {
-          p_email: string
-          p_name: string
-          p_supplier_contact_id: string
-        }
+        Args: { p_email: string; p_name: string; p_supplier_contact_id: string }
         Returns: undefined
       }
     }
