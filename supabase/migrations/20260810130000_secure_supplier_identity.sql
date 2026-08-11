@@ -230,6 +230,7 @@ BEGIN
   IF v_actor IS NULL OR v_org IS NULL OR NOT EXISTS (SELECT 1 FROM public.organization_members WHERE profile_id=v_actor AND organization_id=v_org AND role IN ('admin','manager')) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
   IF v_name IS NULL OR length(v_name) NOT BETWEEN 1 AND 120 THEN RAISE EXCEPTION 'contact name must be 1 to 120 characters' USING ERRCODE='22023'; END IF;
   IF v_email IS NULL OR length(v_email)>254 OR v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN RAISE EXCEPTION 'a valid email is required' USING ERRCODE='22023'; END IF;
+  PERFORM public.supplier_identity_lock(p_supplier_id,v_email);
   INSERT INTO public.supplier_contacts(supplier_id,name,email) VALUES(p_supplier_id,v_name,v_email) RETURNING id INTO v_id;
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'supplier_contact_created','supplier_contact',v_id::text);
   RETURN v_id;
@@ -237,24 +238,38 @@ END $$;
 
 CREATE OR REPLACE FUNCTION public.update_supplier_contact(p_supplier_contact_id uuid,p_name text,p_email text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE v_actor uuid:=auth.uid(); v record; v_name text:=regexp_replace(btrim(p_name),'[[:space:]]+',' ','g'); v_email text:=lower(btrim(p_email));
+DECLARE v_actor uuid:=auth.uid(); v_initial record; v_locked record; v_name text:=regexp_replace(btrim(p_name),'[[:space:]]+',' ','g'); v_email text:=lower(btrim(p_email)); v_old_email text;
 BEGIN
-  SELECT c.*,s.organization_id INTO v FROM public.supplier_contacts c JOIN public.suppliers s ON s.id=c.supplier_id WHERE c.id=p_supplier_contact_id FOR UPDATE OF c;
-  IF NOT FOUND OR v_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.organization_members WHERE profile_id=v_actor AND organization_id=v.organization_id AND role IN ('admin','manager')) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
+  SELECT c.*,s.organization_id INTO v_initial FROM public.supplier_contacts c JOIN public.suppliers s ON s.id=c.supplier_id WHERE c.id=p_supplier_contact_id;
+  IF NOT FOUND OR v_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.organization_members WHERE profile_id=v_actor AND organization_id=v_initial.organization_id AND role IN ('admin','manager')) THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
   IF v_name IS NULL OR length(v_name) NOT BETWEEN 1 AND 120 THEN RAISE EXCEPTION 'contact name must be 1 to 120 characters' USING ERRCODE='22023'; END IF;
   IF v_email IS NULL OR length(v_email)>254 OR v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$' THEN RAISE EXCEPTION 'a valid email is required' USING ERRCODE='22023'; END IF;
-  UPDATE public.supplier_contacts SET name=v_name,email=v_email WHERE id=v.id;
-  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'supplier_contact_updated','supplier_contact',v.id::text);
+  v_old_email:=lower(btrim(v_initial.email));
+  IF v_old_email<=v_email THEN
+    PERFORM public.supplier_identity_lock(v_initial.supplier_id,v_old_email);
+    IF v_email<>v_old_email THEN PERFORM public.supplier_identity_lock(v_initial.supplier_id,v_email); END IF;
+  ELSE
+    PERFORM public.supplier_identity_lock(v_initial.supplier_id,v_email);
+    PERFORM public.supplier_identity_lock(v_initial.supplier_id,v_old_email);
+  END IF;
+  SELECT c.*,s.organization_id INTO v_locked FROM public.supplier_contacts c JOIN public.suppliers s ON s.id=c.supplier_id WHERE c.id=p_supplier_contact_id FOR UPDATE OF c;
+  IF NOT FOUND OR v_locked.supplier_id IS DISTINCT FROM v_initial.supplier_id OR lower(btrim(v_locked.email)) IS DISTINCT FROM v_old_email THEN RAISE EXCEPTION 'supplier contact changed concurrently; retry' USING ERRCODE='40001'; END IF;
+  UPDATE public.supplier_contacts SET name=v_name,email=v_email WHERE id=v_locked.id;
+  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_locked.organization_id,v_actor,'supplier_contact_updated','supplier_contact',v_locked.id::text);
 END $$;
 
 CREATE OR REPLACE FUNCTION public.delete_supplier_contact(p_supplier_contact_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE v_actor uuid:=auth.uid(); v record;
+DECLARE v_actor uuid:=auth.uid(); v_initial record; v_locked record; v_old_email text;
 BEGIN
-  SELECT c.*,s.organization_id INTO v FROM public.supplier_contacts c JOIN public.suppliers s ON s.id=c.supplier_id WHERE c.id=p_supplier_contact_id FOR UPDATE OF c;
-  IF NOT FOUND OR v_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.organization_members WHERE profile_id=v_actor AND organization_id=v.organization_id AND role='admin') THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
-  DELETE FROM public.supplier_contacts WHERE id=v.id;
-  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'supplier_contact_deleted','supplier_contact',v.id::text);
+  SELECT c.*,s.organization_id INTO v_initial FROM public.supplier_contacts c JOIN public.suppliers s ON s.id=c.supplier_id WHERE c.id=p_supplier_contact_id;
+  IF NOT FOUND OR v_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.organization_members WHERE profile_id=v_actor AND organization_id=v_initial.organization_id AND role='admin') THEN RAISE EXCEPTION 'not authorized' USING ERRCODE='42501'; END IF;
+  v_old_email:=lower(btrim(v_initial.email));
+  PERFORM public.supplier_identity_lock(v_initial.supplier_id,v_old_email);
+  SELECT c.*,s.organization_id INTO v_locked FROM public.supplier_contacts c JOIN public.suppliers s ON s.id=c.supplier_id WHERE c.id=p_supplier_contact_id FOR UPDATE OF c;
+  IF NOT FOUND OR v_locked.supplier_id IS DISTINCT FROM v_initial.supplier_id OR lower(btrim(v_locked.email)) IS DISTINCT FROM v_old_email THEN RAISE EXCEPTION 'supplier contact changed concurrently; retry' USING ERRCODE='40001'; END IF;
+  DELETE FROM public.supplier_contacts WHERE id=v_locked.id;
+  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_locked.organization_id,v_actor,'supplier_contact_deleted','supplier_contact',v_locked.id::text);
 END $$;
 
 CREATE OR REPLACE FUNCTION public.create_supplier_invite(p_supplier_id uuid,p_email text)
