@@ -74,7 +74,10 @@ PostgREST RPCs.
 
 ## Default security rule
 
-New public tables and routines are private by default and require explicit grants
-before becoming API-accessible. Every new public table must have RLS; the enabled
-`ensure_rls` event trigger enables it automatically and aborts DDL if that cannot
-be done. RLS and explicit privileges are independent, required boundaries.
+New public tables are private by default and must have RLS; the enabled
+`ensure_rls` event trigger enables RLS automatically and aborts DDL if that cannot
+be done. New or replaced public routines automatically lose `PUBLIC`, `anon`, and
+`authenticated` execution through the `harden_public_routine_privileges` DDL
+trigger. An intentional client RPC must receive an explicit `GRANT EXECUTE` after
+every `CREATE` or `CREATE OR REPLACE`. RLS and explicit privileges are independent,
+required boundaries.

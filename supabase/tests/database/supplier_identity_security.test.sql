@@ -87,9 +87,9 @@ SET LOCAL ROLE authenticated;
 SELECT lives_ok($$SELECT public.create_supplier_contact('b2000000-0000-0000-0000-000000000001','Bob','bob@example.test')$$,'manager creates a contact');
 RESET ROLE;
 CREATE TEMP TABLE identity_contact_ids AS
-SELECT max(id) FILTER (WHERE email='alice@example.test') AS alice_id,
-       max(id) FILTER (WHERE email='bob@example.test') AS bob_id
-FROM public.supplier_contacts;
+SELECT
+  (SELECT id FROM public.supplier_contacts WHERE email='alice@example.test') AS alice_id,
+  (SELECT id FROM public.supplier_contacts WHERE email='bob@example.test') AS bob_id;
 GRANT SELECT ON identity_contact_ids TO authenticated;
 SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000002',true);
 SELECT set_config('request.jwt.claims',jsonb_build_object('sub','b0000000-0000-0000-0000-000000000002','role','authenticated')::text,true);

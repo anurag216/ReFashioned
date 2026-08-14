@@ -73,9 +73,13 @@ SELECT ok(has_function_privilege('authenticated','public.current_actor_can_uploa
 
 SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_default_acl d CROSS JOIN LATERAL aclexplode(coalesce(d.defaclacl,acldefault('r',d.defaclrole))) a JOIN pg_catalog.pg_roles g ON g.oid=a.grantee JOIN pg_catalog.pg_namespace n ON n.oid=d.defaclnamespace WHERE pg_get_userbyid(d.defaclrole)='postgres' AND n.nspname='public' AND d.defaclobjtype='r' AND g.rolname='anon' AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE')),'default tables deny anon DML');
 SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_default_acl d CROSS JOIN LATERAL aclexplode(coalesce(d.defaclacl,acldefault('r',d.defaclrole))) a JOIN pg_catalog.pg_roles g ON g.oid=a.grantee JOIN pg_catalog.pg_namespace n ON n.oid=d.defaclnamespace WHERE pg_get_userbyid(d.defaclrole)='postgres' AND n.nspname='public' AND d.defaclobjtype='r' AND g.rolname='authenticated' AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE')),'default tables deny authenticated DML');
-SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.api_surface_disposable_function()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'default routines deny PUBLIC execute');
-SELECT ok(NOT has_function_privilege('anon','public.api_surface_disposable_function()','EXECUTE'),'default routines deny anon execute');
-SELECT ok(NOT has_function_privilege('authenticated','public.api_surface_disposable_function()','EXECUTE'),'default routines deny authenticated execute');
+SELECT ok(EXISTS(SELECT 1 FROM pg_catalog.pg_event_trigger WHERE evtname='harden_public_routine_privileges' AND evtenabled='O'),'routine hardening event trigger exists and is enabled');
+SELECT is((SELECT evttags FROM pg_catalog.pg_event_trigger WHERE evtname='harden_public_routine_privileges'),ARRAY['CREATE FUNCTION','CREATE PROCEDURE','CREATE AGGREGATE']::text[],'routine hardening trigger targets routine creation DDL');
+SELECT ok((SELECT p.prosecdef AND p.proconfig @> ARRAY['search_path=pg_catalog']
+  AND NOT EXISTS(SELECT 1 FROM pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE')
+  AND NOT has_function_privilege('anon',p.oid,'EXECUTE')
+  AND NOT has_function_privilege('authenticated',p.oid,'EXECUTE')
+  FROM pg_catalog.pg_proc p WHERE p.oid='private.harden_public_routine_privileges()'::regprocedure),'routine hardening helper is fixed-path security definer and private');
 SELECT ok(NOT has_sequence_privilege('anon','public.api_surface_disposable_table_id_seq','USAGE') AND NOT has_sequence_privilege('authenticated','public.api_surface_disposable_table_id_seq','USAGE'),'default sequences deny client usage');
 
 DROP TABLE public.api_surface_disposable_table;

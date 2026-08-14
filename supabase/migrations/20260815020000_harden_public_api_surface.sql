@@ -5,7 +5,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE SELECT, USAGE ON SEQUENCES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  REVOKE EXECUTE ON ROUTINES FROM PUBLIC, anon, authenticated;
+  REVOKE EXECUTE ON ROUTINES FROM anon, authenticated;
 
 -- Event-trigger failures must abort the creating transaction. In particular,
 -- do not catch an ALTER TABLE failure and allow an unprotected table to exist.
@@ -105,6 +105,42 @@ COMMENT ON FUNCTION public.rls_auto_enable() IS
 -- compliance_docs INSERT policy.
 CREATE SCHEMA IF NOT EXISTS private AUTHORIZATION postgres;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
+
+-- Per-schema default ACLs cannot subtract PostgreSQL's global default EXECUTE
+-- grant to PUBLIC. Harden each new or replaced public routine at DDL completion
+-- instead, so its creating transaction must explicitly restore intended API
+-- grants after CREATE or CREATE OR REPLACE.
+CREATE OR REPLACE FUNCTION private.harden_public_routine_privileges()
+RETURNS event_trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $function$
+DECLARE
+  command record;
+BEGIN
+  FOR command IN
+    SELECT *
+    FROM pg_catalog.pg_event_trigger_ddl_commands()
+    WHERE schema_name = 'public'
+      AND object_type IN ('function', 'procedure', 'aggregate')
+  LOOP
+    EXECUTE pg_catalog.format(
+      'REVOKE EXECUTE ON ROUTINE %s FROM PUBLIC, anon, authenticated',
+      command.object_identity
+    );
+  END LOOP;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.harden_public_routine_privileges()
+FROM PUBLIC, anon, authenticated, service_role;
+
+DROP EVENT TRIGGER IF EXISTS harden_public_routine_privileges;
+CREATE EVENT TRIGGER harden_public_routine_privileges
+ON ddl_command_end
+WHEN TAG IN ('CREATE FUNCTION', 'CREATE PROCEDURE', 'CREATE AGGREGATE')
+EXECUTE FUNCTION private.harden_public_routine_privileges();
 
 CREATE OR REPLACE FUNCTION private.current_actor_can_upload_evidence_object(
   p_bucket text,
