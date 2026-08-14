@@ -5,7 +5,6 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
-import { logAudit } from "../lib/audit";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrg } from "../lib/api/useOrg";
 import { useProducts } from "../lib/api/useProducts";
@@ -124,7 +123,6 @@ export function ProductCatalog() {
       .eq("id", id)
       .eq("organization_id", product.organization_id);
     void queryClient.invalidateQueries({ queryKey: ["products", product.organization_id] });
-    void logAudit({ action: "archived", entity_type: "product", entity_name: product.name });
     setArchiveTarget(null);
     setArchiving(false);
     setArchivedBanner(true);

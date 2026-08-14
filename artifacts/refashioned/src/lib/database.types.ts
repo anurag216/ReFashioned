@@ -82,29 +82,29 @@ export type Database = {
       audit_logs: {
         Row: {
           action: string
-          created_at: string | null
+          created_at: string
           entity_name: string
           entity_type: string
           id: string
-          organization_id: string | null
+          organization_id: string
           profile_id: string | null
         }
         Insert: {
           action: string
-          created_at?: string | null
+          created_at?: string
           entity_name: string
           entity_type: string
           id?: string
-          organization_id?: string | null
+          organization_id: string
           profile_id?: string | null
         }
         Update: {
           action?: string
-          created_at?: string | null
+          created_at?: string
           entity_name?: string
           entity_type?: string
           id?: string
-          organization_id?: string | null
+          organization_id?: string
           profile_id?: string | null
         }
         Relationships: [

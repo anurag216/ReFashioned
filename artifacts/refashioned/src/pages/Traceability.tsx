@@ -5,7 +5,6 @@ import {
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
-import { logAudit } from "../lib/audit";
 import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 
 // Stage name → icon/colour — purely presentational, lives client-side
@@ -262,7 +261,6 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
       const { error: finalizeError } = await callRpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
       if (finalizeError) { setSaveError(`Stage saved. Evidence finalization failed: ${finalizeError.message}. Retry finalization before starting another upload.`); setSaving(false); return; }
     }
-    void logAudit({ action: "stage_added", entity_type: "lifecycle_stage", entity_name: addForm.stage_name.trim() });
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
     setCertificateFile(null);
