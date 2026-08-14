@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(106);
+SELECT plan(107);
 
 SELECT has_table('public','supplier_access_memberships','supplier access membership table exists');
 SELECT hasnt_column('public','supplier_contacts','profile_id','contact metadata is not an authorization credential');
