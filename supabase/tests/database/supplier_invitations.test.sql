@@ -94,7 +94,7 @@ SET LOCAL ROLE authenticated;
 SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM usable)),'42501',NULL,'missing JWT email cannot redeem');
 RESET ROLE;
 SELECT is((SELECT redeemed_at FROM public.supplier_invites WHERE id=(SELECT invitation_id FROM usable)),NULL::timestamptz,'missing email does not consume invite');
-SELECT is((SELECT count(*) FROM public.supplier_contacts WHERE profile_id='90000000-0000-0000-0000-000000000002'),0::bigint,'missing email creates no contact link');
+SELECT is((SELECT count(*) FROM public.supplier_access_memberships WHERE profile_id='90000000-0000-0000-0000-000000000002'),0::bigint,'missing email creates no access membership');
 
 -- Unlinked contact is safely linked and redemption is one-time and audited.
 INSERT INTO public.supplier_contacts(supplier_id,email) VALUES('92000000-0000-0000-0000-000000000001','supplier@test.invalid');
@@ -103,24 +103,20 @@ SET LOCAL ROLE authenticated;
 SELECT lives_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM usable)),'unlinked contact can be linked');
 SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM usable)),'P0001','invitation was already redeemed','second redemption fails');
 RESET ROLE;
-SELECT is((SELECT profile_id FROM public.supplier_contacts WHERE email='supplier@test.invalid'),'90000000-0000-0000-0000-000000000002'::uuid,'correct supplier profile is linked');
+SELECT is((SELECT profile_id FROM public.supplier_access_memberships WHERE supplier_contact_id=(SELECT id FROM public.supplier_contacts WHERE email='supplier@test.invalid')),'90000000-0000-0000-0000-000000000002'::uuid,'correct supplier membership is created');
 SELECT is((SELECT count(*) FROM public.organization_members WHERE profile_id='90000000-0000-0000-0000-000000000002'),0::bigint,'redemption grants no organization membership');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='supplier_invite_redeemed'),1::bigint,'redemption is audited');
 
 -- Existing linked contact cannot be taken over and invitation remains usable.
-INSERT INTO public.supplier_contacts(supplier_id,email,profile_id) VALUES('92000000-0000-0000-0000-000000000003','takeover@test.invalid','90000000-0000-0000-0000-000000000006');
+INSERT INTO public.supplier_contacts(id,supplier_id,email) VALUES('94000000-0000-0000-0000-000000000006','92000000-0000-0000-0000-000000000003','takeover@test.invalid');
+INSERT INTO public.supplier_access_memberships(organization_id,supplier_id,supplier_contact_id,profile_id,legacy_migrated) VALUES('91000000-0000-0000-0000-000000000001','92000000-0000-0000-0000-000000000003','94000000-0000-0000-0000-000000000006','90000000-0000-0000-0000-000000000006',true);
 SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000001',true);
 SELECT set_config('request.jwt.claims','{"sub":"90000000-0000-0000-0000-000000000001","email":"admin@test.invalid","role":"authenticated"}',true);
 SET LOCAL ROLE authenticated;
-CREATE TEMP TABLE takeover AS SELECT * FROM public.create_supplier_invite('92000000-0000-0000-0000-000000000003','takeover@test.invalid');
+SELECT throws_ok($$SELECT * FROM public.create_supplier_invite('92000000-0000-0000-0000-000000000003','takeover@test.invalid')$$,'55000','supplier contact already has active portal access','linked contact cannot be invited');
 RESET ROLE;
-SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000007',true);
-SELECT set_config('request.jwt.claims','{"sub":"90000000-0000-0000-0000-000000000007","email":"takeover@test.invalid","role":"authenticated"}',true);
-SET LOCAL ROLE authenticated;
-SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM takeover)),'42501',NULL,'linked contact cannot be taken over');
-RESET ROLE;
-SELECT is((SELECT profile_id FROM public.supplier_contacts WHERE email='takeover@test.invalid'),'90000000-0000-0000-0000-000000000006'::uuid,'original contact profile is unchanged');
-SELECT is((SELECT redeemed_at FROM public.supplier_invites WHERE id=(SELECT invitation_id FROM takeover)),NULL::timestamptz,'takeover rejection does not consume invite');
+SELECT is((SELECT profile_id FROM public.supplier_access_memberships WHERE supplier_contact_id='94000000-0000-0000-0000-000000000006'),'90000000-0000-0000-0000-000000000006'::uuid,'original membership profile is unchanged');
+SELECT is((SELECT count(*) FROM public.supplier_invites WHERE supplier_id='92000000-0000-0000-0000-000000000003' AND lower(email)='takeover@test.invalid'),0::bigint,'rejected takeover creates no invitation');
 
 -- Internal identities and multi-supplier identities are rejected.
 SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000001',true);
@@ -134,11 +130,12 @@ SELECT set_config('request.jwt.claims','{"sub":"90000000-0000-0000-0000-00000000
 SET LOCAL ROLE authenticated;
 SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM internal_invite)),'42501',NULL,'internal member cannot redeem');
 RESET ROLE;
-INSERT INTO public.supplier_contacts(supplier_id,email,profile_id) VALUES('92000000-0000-0000-0000-000000000001','multi-old@test.invalid','90000000-0000-0000-0000-000000000009');
+INSERT INTO public.supplier_contacts(id,supplier_id,email) VALUES('94000000-0000-0000-0000-000000000009','92000000-0000-0000-0000-000000000001','multi-old@test.invalid');
+INSERT INTO public.supplier_access_memberships(organization_id,supplier_id,supplier_contact_id,profile_id,legacy_migrated) VALUES('91000000-0000-0000-0000-000000000001','92000000-0000-0000-0000-000000000001','94000000-0000-0000-0000-000000000009','90000000-0000-0000-0000-000000000009',true);
 SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000009',true);
 SELECT set_config('request.jwt.claims','{"sub":"90000000-0000-0000-0000-000000000009","email":"multi@test.invalid","role":"authenticated"}',true);
 SET LOCAL ROLE authenticated;
-SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM multi_invite)),'P0001','account is already linked to another supplier','one profile cannot link to multiple suppliers');
+SELECT throws_ok(format('SELECT public.redeem_supplier_invite(%L)',(SELECT token FROM multi_invite)),'55000','account already has active supplier access','one profile cannot link to multiple suppliers');
 RESET ROLE;
 SELECT ok(
   regexp_count(
