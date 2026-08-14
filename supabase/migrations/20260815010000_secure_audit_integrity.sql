@@ -74,6 +74,18 @@ BEGIN
     RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
   END IF;
 
+  -- A parent organization is removed before its foreign-key cascade deletes
+  -- memberships. Skip that cascade path: it is not a standalone membership
+  -- removal and its deleted organization can no longer satisfy the audit FK.
+  IF TG_OP = 'DELETE'
+     AND NOT EXISTS (
+       SELECT 1
+       FROM public.organizations AS organization
+       WHERE organization.id = OLD.organization_id
+     ) THEN
+    RETURN OLD;
+  END IF;
+
   IF TG_OP = 'INSERT' THEN
     audit_action := 'organization_member_added';
     audit_organization_id := NEW.organization_id;
