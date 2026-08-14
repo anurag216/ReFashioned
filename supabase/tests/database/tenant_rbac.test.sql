@@ -47,8 +47,8 @@ SELECT ok((
 ), 'all tenant tables have RLS enabled');
 
 SET LOCAL ROLE anon;
-SELECT is((SELECT count(*) FROM public.organizations), 0::bigint, 'anonymous cannot list organizations');
-SELECT is((SELECT count(*) FROM public.organization_members), 0::bigint, 'anonymous cannot list memberships');
+SELECT throws_ok($$SELECT count(*) FROM public.organizations$$, '42501', NULL, 'anonymous cannot access organizations');
+SELECT throws_ok($$SELECT count(*) FROM public.organization_members$$, '42501', NULL, 'anonymous cannot access organization memberships');
 SELECT throws_ok($$SELECT count(*) FROM public.brands$$, '42501', NULL, 'anonymous cannot access legacy brands');
 SELECT throws_ok($$SELECT count(*) FROM public.users$$, '42501', NULL, 'anonymous cannot access legacy users');
 SELECT throws_ok($$SELECT count(*) FROM public.digital_product_passports$$, '42501', NULL, 'anonymous cannot read DPP rows');

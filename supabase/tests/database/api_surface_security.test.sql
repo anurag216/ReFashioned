@@ -9,28 +9,28 @@ SELECT ok(NOT has_table_privilege('authenticated','public.api_surface_disposable
 
 CREATE FUNCTION public.api_surface_disposable_function() RETURNS integer
 LANGUAGE sql IMMUTABLE AS 'SELECT 1';
-SELECT ok(NOT has_function_privilege('PUBLIC','public.api_surface_disposable_function()','EXECUTE'),'new routine grants no PUBLIC execute');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.api_surface_disposable_function()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'new routine grants no PUBLIC execute');
 SELECT ok(NOT has_function_privilege('anon','public.api_surface_disposable_function()','EXECUTE'),'new routine grants no anon execute');
 SELECT ok(NOT has_function_privilege('authenticated','public.api_surface_disposable_function()','EXECUTE'),'new routine grants no authenticated execute');
 
 SELECT ok(EXISTS(SELECT 1 FROM pg_catalog.pg_event_trigger WHERE evtname='ensure_rls'),'ensure_rls exists');
 SELECT is((SELECT evtenabled::text FROM pg_catalog.pg_event_trigger WHERE evtname='ensure_rls'),'O','ensure_rls is enabled');
 SELECT is((SELECT evttags FROM pg_catalog.pg_event_trigger WHERE evtname='ensure_rls'),ARRAY['CREATE TABLE','CREATE TABLE AS','SELECT INTO']::text[],'ensure_rls targets table creation DDL');
-SELECT ok(NOT has_function_privilege('PUBLIC','public.rls_auto_enable()','EXECUTE'),'RLS event function is private from PUBLIC');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.rls_auto_enable()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'RLS event function is private from PUBLIC');
 SELECT ok(NOT has_function_privilege('anon','public.rls_auto_enable()','EXECUTE'),'RLS event function is private from anon');
 SELECT ok(NOT has_function_privilege('authenticated','public.rls_auto_enable()','EXECUTE'),'RLS event function is private from authenticated');
 SELECT ok((SELECT prosecdef FROM pg_catalog.pg_proc WHERE oid='public.rls_auto_enable()'::regprocedure),'RLS event function remains security definer');
 SELECT ok((SELECT proconfig @> ARRAY['search_path=pg_catalog'] FROM pg_catalog.pg_proc WHERE oid='public.rls_auto_enable()'::regprocedure),'RLS event function has controlled search path');
 
 SELECT is(
-  (SELECT array_agg(p.proname||'('||pg_catalog.pg_get_function_identity_arguments(p.oid)||')' ORDER BY 1)
+  (SELECT array_agg(p.proname||'('||pg_catalog.pg_get_function_identity_arguments(p.oid)||')' ORDER BY p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid))
    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
    WHERE n.nspname='public' AND has_function_privilege('anon',p.oid,'EXECUTE')),
   ARRAY['get_public_product_passport(p_public_slug text)','get_supplier_invite_metadata(p_token text)']::text[],
   'anonymous routine allowlist is exact');
 
 SELECT is(
-  (SELECT array_agg(p.proname||'('||pg_catalog.pg_get_function_identity_arguments(p.oid)||')' ORDER BY 1)
+  (SELECT array_agg(p.proname||'('||pg_catalog.pg_get_function_identity_arguments(p.oid)||')' ORDER BY p.proname,pg_catalog.pg_get_function_identity_arguments(p.oid))
    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
    WHERE n.nspname='public' AND has_function_privilege('authenticated',p.oid,'EXECUTE')),
   ARRAY[
@@ -51,7 +51,7 @@ SELECT is(
     'unpublish_product_passport(p_product_id uuid)','update_supplier_contact(p_supplier_contact_id uuid, p_name text, p_email text)'
   ]::text[], 'authenticated routine allowlist is exact');
 
-SELECT is((SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND has_function_privilege('PUBLIC',p.oid,'EXECUTE')),0::bigint,'PUBLIC executes no public-schema routine');
+SELECT is((SELECT count(DISTINCT p.oid) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE n.nspname='public' AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),0::bigint,'PUBLIC executes no public-schema routine');
 SELECT is((SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prosecdef AND has_function_privilege('anon',p.oid,'EXECUTE') AND p.proname NOT IN ('get_public_product_passport','get_supplier_invite_metadata')),0::bigint,'no private security definer is anonymous-callable');
 
 SELECT is((SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE')),0::bigint,'anon has no public table DML');
@@ -73,7 +73,7 @@ SELECT ok(has_function_privilege('authenticated','public.current_actor_can_uploa
 
 SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_default_acl d CROSS JOIN LATERAL aclexplode(coalesce(d.defaclacl,acldefault('r',d.defaclrole))) a JOIN pg_catalog.pg_roles g ON g.oid=a.grantee JOIN pg_catalog.pg_namespace n ON n.oid=d.defaclnamespace WHERE pg_get_userbyid(d.defaclrole)='postgres' AND n.nspname='public' AND d.defaclobjtype='r' AND g.rolname='anon' AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE')),'default tables deny anon DML');
 SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_default_acl d CROSS JOIN LATERAL aclexplode(coalesce(d.defaclacl,acldefault('r',d.defaclrole))) a JOIN pg_catalog.pg_roles g ON g.oid=a.grantee JOIN pg_catalog.pg_namespace n ON n.oid=d.defaclnamespace WHERE pg_get_userbyid(d.defaclrole)='postgres' AND n.nspname='public' AND d.defaclobjtype='r' AND g.rolname='authenticated' AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE')),'default tables deny authenticated DML');
-SELECT ok(NOT has_function_privilege('PUBLIC','public.api_surface_disposable_function()','EXECUTE'),'default routines deny PUBLIC execute');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.api_surface_disposable_function()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'default routines deny PUBLIC execute');
 SELECT ok(NOT has_function_privilege('anon','public.api_surface_disposable_function()','EXECUTE'),'default routines deny anon execute');
 SELECT ok(NOT has_function_privilege('authenticated','public.api_surface_disposable_function()','EXECUTE'),'default routines deny authenticated execute');
 SELECT ok(NOT has_sequence_privilege('anon','public.api_surface_disposable_table_id_seq','USAGE') AND NOT has_sequence_privilege('authenticated','public.api_surface_disposable_table_id_seq','USAGE'),'default sequences deny client usage');

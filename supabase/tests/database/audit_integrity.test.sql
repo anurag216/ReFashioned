@@ -79,7 +79,7 @@ SET LOCAL ROLE authenticated;
 SELECT is((SELECT count(*) FROM public.audit_logs),0::bigint,'supplier identity cannot read internal audit events');
 RESET ROLE;
 SET LOCAL ROLE anon;
-SELECT is((SELECT count(*) FROM public.audit_logs),0::bigint,'anonymous cannot read audit events');
+SELECT throws_ok($$SELECT count(*) FROM public.audit_logs$$,'42501',NULL,'anonymous cannot access audit events');
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000006',true);

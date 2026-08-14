@@ -99,3 +99,64 @@ FROM PUBLIC, anon, authenticated, service_role;
 
 COMMENT ON FUNCTION public.rls_auto_enable() IS
   'Private event-trigger function: enables RLS on new public tables and propagates failures to abort unsafe DDL.';
+
+-- Storage policies execute with the caller's table privileges. Keep evidence
+-- rows private and expose only this current-actor boolean decision to the
+-- compliance_docs INSERT policy.
+CREATE SCHEMA IF NOT EXISTS private AUTHORIZATION postgres;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION private.current_actor_can_upload_evidence_object(
+  p_bucket text,
+  p_path text,
+  p_mime_type text,
+  p_size_bytes bigint
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $function$
+  SELECT auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.evidence_uploads AS evidence
+      WHERE evidence.storage_bucket = p_bucket
+        AND evidence.storage_path = p_path
+        AND evidence.status = 'upload_pending'
+        AND evidence.upload_expires_at > pg_catalog.now()
+        AND evidence.uploaded_by = auth.uid()
+        AND evidence.mime_type = p_mime_type
+        AND evidence.size_bytes = p_size_bytes
+        AND public.current_actor_can_upload_evidence(evidence.lifecycle_stage_id)
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION private.current_actor_can_upload_evidence_object(text,text,text,bigint)
+FROM PUBLIC, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.current_actor_can_upload_evidence_object(text,text,text,bigint)
+TO authenticated;
+
+DROP POLICY IF EXISTS compliance_docs_insert ON storage.objects;
+CREATE POLICY compliance_docs_insert
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'compliance_docs'
+  AND owner = auth.uid()
+  AND metadata->>'mimetype' IN ('application/pdf','image/png','image/jpeg')
+  AND CASE
+    WHEN metadata->>'size' ~ '^[0-9]{1,8}$' THEN
+      (metadata->>'size')::bigint BETWEEN 1 AND 10485760
+      AND private.current_actor_can_upload_evidence_object(
+        bucket_id,
+        name,
+        metadata->>'mimetype',
+        (metadata->>'size')::bigint
+      )
+    ELSE false
+  END
+);

@@ -59,7 +59,9 @@ Application roles have no direct access to `brands`, `users`, `audit_events`,
 `evidence_uploads`, `certifications`, or `digital_product_passports`.
 Sensitive mutations and projections use the RPCs above. The `compliance_docs`
 bucket remains private; its object policies use current-actor access helpers, so
-supplier revocation takes effect on the next authorization check.
+supplier revocation takes effect on the next authorization check. Storage upload
+authorization uses a narrow boolean helper in the non-API `private` schema;
+evidence rows remain inaccessible directly.
 
 ## Private helpers
 
@@ -67,6 +69,8 @@ Trigger functions and internal `SECURITY DEFINER` routines—including audit,
 validation, locking, payload-building, and arbitrary-actor provenance helpers—
 are not directly executable by `PUBLIC`, `anon`, or `authenticated`.
 `rls_auto_enable` is infrastructure for the `ensure_rls` event trigger, not an RPC.
+Helpers in the `private` schema support internal policy evaluation and are not
+PostgREST RPCs.
 
 ## Default security rule
 
