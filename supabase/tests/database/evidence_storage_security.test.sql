@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(65);
+SELECT no_plan();
 
 INSERT INTO auth.users(id,instance_id,aud,role,email) VALUES
  ('a0000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','e-admin@test.invalid'),
@@ -100,11 +100,22 @@ INSERT INTO storage.objects(bucket_id,name,owner,owner_id,metadata) VALUES('comp
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
 SELECT lives_ok(format('SELECT public.finalize_evidence_upload(%L)',(SELECT evidence_id FROM admin_intent)),'valid object finalizes');
 RESET ROLE;
-SELECT is((SELECT status FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM admin_intent)),'pending_review','finalization enters pending review');
+SELECT is((SELECT status FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM admin_intent)),'quarantined','finalization enters quarantine, not pending review');
+SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),0::bigint,'quarantined evidence has no download target');
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
+SELECT throws_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NULL)$$,(SELECT evidence_id FROM admin_intent)),'P0001','clean fingerprinted evidence pending review required','manager cannot approve quarantined evidence');
+SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf',repeat('a',64),'clean','test','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'42501','trusted scanner required','authenticated admin cannot attest clean');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.role','service_role',true);
+SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs','evidence/wrong.pdf',100,'application/pdf','application/pdf',repeat('a',64),'clean','test','clean')$$,(SELECT evidence_id FROM admin_intent)),'P0001','scan result object identity mismatch','scan result is bound to exact object identity');
+SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf','BAD','clean','test','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'P0001','invalid authoritative SHA-256','invalid authoritative digest rejected');
+SELECT lives_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf',repeat('a',64),'clean','deterministic-ci','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'trusted scanner accepts valid object-bound result');
+SELECT set_config('request.jwt.claim.role','',true);
+SELECT ok((SELECT status='pending_review' AND scan_status='clean' AND content_sha256=repeat('a',64) FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM admin_intent)),'clean fingerprinted evidence enters pending review');
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format('SELECT public.finalize_evidence_upload(%L)',(SELECT evidence_id FROM admin_intent)),'P0001','upload intent is not pending','duplicate finalization fails');
 RESET ROLE;
-SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_upload_finalized' AND entity_name=(SELECT evidence_id::text FROM admin_intent)),1::bigint,'finalization audited once');
+SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_quarantined' AND entity_name=(SELECT evidence_id::text FROM admin_intent)),1::bigint,'quarantine audited once');
 
 -- Finalization validates the privileged server's completed object against the intent.
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;

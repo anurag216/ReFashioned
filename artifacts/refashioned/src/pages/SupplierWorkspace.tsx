@@ -4,7 +4,7 @@ import type { SupplierAccess } from "../lib/auth/useSupplierAccess";
 import { supabase } from "../lib/supabaseClient";
 import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
 
-type Task = { lifecycle_stage_id: string; stage_name: string; product_name: string; document_requirement: string; evidence_status: string | null; evidence_id: string | null; rejection_reason: string | null };
+type Task = { lifecycle_stage_id: string; stage_name: string; product_name: string; document_requirement: string; evidence_status: string | null; scan_status: string | null; evidence_id: string | null; rejection_reason: string | null };
 type Intent = { evidence_id: string; bucket_id: string; storage_path: string; upload_expires_at: string };
 
 export function SupplierWorkspace({ access, email, onSignOut }: { access: SupplierAccess; email: string; onSignOut: () => void }) {
@@ -73,12 +73,13 @@ export function SupplierWorkspace({ access, email, onSignOut }: { access: Suppli
         {tasks.map(task => <li key={task.lifecycle_stage_id} className="rounded-lg border p-4">
           <h2 className="font-semibold">{task.product_name} — {task.stage_name}</h2>
           <p className="text-sm text-muted-foreground">{task.document_requirement}</p>
-          <p className="mt-2 text-sm capitalize">Status: {(task.evidence_status ?? "not submitted").replaceAll("_", " ")}</p>
+          <p className="mt-2 text-sm">Status: {task.evidence_status === "upload_pending" ? "Uploading…" : task.evidence_status === "quarantined" && task.scan_status === "pending" ? "Security scan pending" : task.evidence_status === "pending_review" ? "Ready for review" : task.evidence_status === "approved" ? "Approved" : task.evidence_status === "rejected" ? "Rejected" : task.evidence_status ? task.evidence_status.replaceAll("_", " ") : "Not submitted"}</p>
+          {task.evidence_status === "quarantined" && task.scan_status !== "pending" && <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-900">This document could not be accepted. Please upload a new file.</p>}
           {task.rejection_reason && <p className="mt-2 rounded bg-amber-50 p-2 text-sm text-amber-900">Review feedback: {task.rejection_reason}</p>}
           <div className="mt-3 flex gap-3">
-            {task.evidence_id && task.evidence_status !== "upload_pending" && <SecureDocumentLink evidenceId={task.evidence_id} label="View submission" />}
+            {task.evidence_id && !["upload_pending", "quarantined"].includes(task.evidence_status ?? "") && <SecureDocumentLink evidenceId={task.evidence_id} label="View submission" />}
             {task.evidence_id && task.evidence_status === "upload_pending" && <button onClick={()=>void cancelIntent(task.evidence_id!)} disabled={uploading!==null} className="rounded border px-3 py-1 text-xs">Cancel pending upload</button>}
-            {(task.evidence_status === null || task.evidence_status === "rejected") && <label className="inline-flex cursor-pointer items-center gap-2 rounded bg-emerald-700 px-3 py-1 text-xs text-white">
+            {(task.evidence_status === null || task.evidence_status === "rejected" || (task.evidence_status === "quarantined" && task.scan_status !== "pending")) && <label className="inline-flex cursor-pointer items-center gap-2 rounded bg-emerald-700 px-3 py-1 text-xs text-white">
               <FileUp className="h-3 w-3" /> {uploading === task.lifecycle_stage_id ? "Uploading…" : "Submit evidence"}
               <input className="sr-only" type="file" accept="application/pdf,image/png,image/jpeg" disabled={uploading !== null} onChange={event => { const file=event.target.files?.[0]; if(file) void upload(task,file); }} />
             </label>}

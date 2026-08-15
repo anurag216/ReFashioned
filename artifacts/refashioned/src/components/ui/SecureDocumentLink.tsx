@@ -10,12 +10,12 @@ type DownloadTarget = {
 };
 
 /** Resolves an authorized, 60-second URL only in direct response to a click. */
-export function SecureDocumentLink({ evidenceId, label = "View document" }: { evidenceId: string; label?: string }) {
+export function SecureDocumentLink({ evidenceId, label = "View document", available = true }: { evidenceId: string; label?: string; available?: boolean }) {
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function openDocument() {
-    if (!supabase || opening) return;
+    if (!supabase || opening || !available) return;
     setOpening(true);
     setError(null);
     // The generated schema is refreshed from a clean database in CI.
@@ -43,9 +43,9 @@ export function SecureDocumentLink({ evidenceId, label = "View document" }: { ev
   }
 
   return <span className="inline-flex flex-col items-start gap-1">
-    <button type="button" onClick={() => void openDocument()} disabled={opening}
+    <button type="button" onClick={() => void openDocument()} disabled={opening || !available}
       className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-border bg-white text-foreground hover:bg-muted disabled:opacity-50">
-      <ExternalLink className="w-3 h-3" /> {opening ? "Authorizing…" : label}
+      <ExternalLink className="w-3 h-3" /> {!available ? "Unavailable during security scan" : opening ? "Authorizing…" : label}
     </button>
     {error && <span role="alert" className="text-xs text-red-700">{error}</span>}
   </span>;

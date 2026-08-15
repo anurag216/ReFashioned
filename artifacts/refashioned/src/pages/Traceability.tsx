@@ -39,7 +39,7 @@ interface TraceRow {
   flagged: boolean;
   evidence: EvidenceRow[];
 }
-interface EvidenceRow { evidence_id:string; lifecycle_stage_id:string; document_type:string; original_filename:string; evidence_status:string; uploaded_by:string|null; uploaded_at:string|null; reviewed_by:string|null; reviewed_at:string|null; rejection_reason:string|null; certification_id:string|null; certification_name:string|null; certification_status:string|null; certification_expiry:string|null }
+interface EvidenceRow { evidence_id:string; lifecycle_stage_id:string; document_type:string; original_filename:string; evidence_status:string; scan_status:string; uploaded_by:string|null; uploaded_at:string|null; reviewed_by:string|null; reviewed_at:string|null; rejection_reason:string|null; certification_id:string|null; certification_name:string|null; certification_status:string|null; certification_expiry:string|null }
 
 export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) => void }) {
   const [products, setProducts] = useState<{ id: string; name: string; sku: string | null }[]>([]);
@@ -412,11 +412,12 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-3 whitespace-normal min-w-64">{row.evidence.length===0 && <span className="text-xs text-muted-foreground">Upload evidence</span>}
                         {row.evidence.map(e=><section key={e.evidence_id} className="rounded border p-2 text-xs">
-                          <p className="font-medium">{e.original_filename}</p><p>{e.document_type.replaceAll("_"," ")} · {e.evidence_status.replaceAll("_"," ")}</p>
+                          <p className="font-medium">{e.original_filename}</p><p>{e.document_type.replaceAll("_"," ")} · {e.evidence_status === "quarantined" && e.scan_status === "pending" ? "Security scan pending" : e.evidence_status === "pending_review" ? "Ready for review" : e.evidence_status.replaceAll("_"," ")}</p>
+                          {e.evidence_status === "quarantined" && e.scan_status !== "pending" && <p className="text-red-700">This document could not be accepted. Please upload a new file.</p>}
                           {e.uploaded_at&&<p>Uploaded {new Date(e.uploaded_at).toLocaleString()} by {e.uploaded_by}</p>}
                           {e.reviewed_at&&<p>Reviewed {new Date(e.reviewed_at).toLocaleString()} by {e.reviewed_by}</p>}
                           {e.rejection_reason&&<p className="text-red-700">{e.rejection_reason}</p>}
-                          {e.evidence_status!=="upload_pending"&&<SecureDocumentLink evidenceId={e.evidence_id}/>}
+                          {!['upload_pending','quarantined'].includes(e.evidence_status)&&<SecureDocumentLink evidenceId={e.evidence_id}/>}
                           {canEdit&&e.evidence_status==="pending_review"&&<div className="mt-2 flex gap-2"><button onClick={()=>void reviewEvidence(e.evidence_id,"approved")}>Approve</button><button onClick={()=>void reviewEvidence(e.evidence_id,"rejected")}>Reject</button></div>}
                           {canEdit&&e.evidence_status==="approved"&&!e.certification_id&&<button onClick={()=>void certifyEvidence(e)}>Create certification</button>}
                           {e.certification_id&&<p>{e.certification_name} · {e.certification_status} {canEdit&&e.certification_status==="verified"&&<button onClick={()=>void revokeCertification(e.certification_id!)}>Revoke</button>}</p>}
