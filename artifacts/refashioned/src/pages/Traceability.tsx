@@ -137,7 +137,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
           co2_impact_kg,
           water_usage_l,
           flagged,
-          suppliers (
+          supplier:suppliers!lifecycle_stage_supplier_scope_fkey (
             name,
             location,
             tier,
@@ -156,9 +156,9 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         setRows([]);
       } else {
         const mapped: TraceRow[] = (data ?? []).map((r: Record<string, unknown>) => {
-          const sup = Array.isArray(r.suppliers)
-            ? (r.suppliers[0] as Record<string, unknown>)
-            : (r.suppliers as Record<string, unknown> | null);
+          const sup = Array.isArray(r.supplier)
+            ? (r.supplier[0] as Record<string, unknown> | undefined) ?? null
+            : (r.supplier as Record<string, unknown> | null);
           const iconMeta = STAGE_ICON_MAP[r.stage_name as string] ?? DEFAULT_ICON;
           const tier = sup?.tier != null ? `Tier ${sup.tier}` : null;
           const status = sup?.status as string | null;

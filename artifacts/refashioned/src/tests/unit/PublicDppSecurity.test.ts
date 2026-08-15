@@ -18,6 +18,10 @@ describe("public DPP data boundary", () => {
     }
     expect(`${traceabilitySource}\n${evidenceUploadSource}`).not.toMatch(/const\s+\w+\s*=\s*(?:client|supabase)\.rpc(?:\s+as\b|\s*;)/);
   });
+  it("selects lifecycle suppliers through the tenant-scoped relationship", () => {
+    expect(traceabilitySource).toContain("supplier:suppliers!lifecycle_stage_supplier_scope_fkey (");
+    expect(traceabilitySource).not.toMatch(/\n\s+suppliers\s*\(/);
+  });
   it("uses only the curated public RPC", () => {
     expect(publicSource).toContain('supabase.rpc("get_public_product_passport"');
     expect(publicSource).not.toContain(".from(");
