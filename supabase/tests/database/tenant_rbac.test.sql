@@ -125,33 +125,35 @@ SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001
 SET LOCAL ROLE authenticated;
 SELECT lives_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000001','admin product')$$, 'admin manages permitted tenant records');
 SELECT lives_ok($$UPDATE public.organizations SET name='Tenant A updated' WHERE id='10000000-0000-0000-0000-000000000001'$$, 'admin updates organization settings');
-SELECT lives_ok($$INSERT INTO public.organization_members (id,organization_id,profile_id,role) VALUES ('20000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000006','manager')$$, 'admin adds a non-final membership');
-SELECT lives_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000006'$$, 'admin updates a non-final membership');
-SELECT lives_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000006'$$, 'admin removes a non-final membership');
+SELECT throws_ok($$INSERT INTO public.organization_members (id,organization_id,profile_id,role) VALUES ('20000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000006','manager')$$, '42501', NULL, 'admin direct membership insert is denied');
+SELECT throws_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000002'$$, '42501', NULL, 'admin direct membership update is denied');
+SELECT throws_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000002'$$, '42501', NULL, 'admin direct membership delete is denied');
 SELECT throws_ok($$SELECT * FROM public.supplier_invites$$, '42501', NULL, 'admin cannot bypass invitation RPC with raw table access');
 SELECT throws_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000002','cross tenant')$$, '42501', NULL, 'admin cannot affect another tenant');
-SELECT throws_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000001'$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be demoted');
-SELECT throws_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000001'$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be deleted');
+SELECT throws_ok($$SELECT public.update_organization_member_role('20000000-0000-0000-0000-000000000001','viewer','Final admin protection')$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be demoted through RPC');
+SELECT throws_ok($$SELECT public.revoke_organization_member_access('20000000-0000-0000-0000-000000000001','Final admin protection')$$, 'P0001', 'cannot remove or demote the final organization admin', 'final admin cannot be revoked through RPC');
 SELECT throws_ok(
-  $$INSERT INTO public.organization_members (
-      organization_id,
-      profile_id,
-      role
-    )
-    VALUES (
-      '10000000-0000-0000-0000-000000000001',
-      '00000000-0000-0000-0000-000000000005',
-      'owner'
+  $$SELECT public.update_organization_member_role(
+      '20000000-0000-0000-0000-000000000002',
+      'owner',
+      'Invalid role test'
     )$$,
-  '23514',
+  '22023',
   NULL,
   'invalid roles are rejected'
 );
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', true);
+SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000004","email":"admin-b@test.invalid","role":"authenticated"}', true);
 SET LOCAL ROLE authenticated;
-SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','viewer')$$, '23505', 'duplicate key value violates unique constraint "organization_members_profile_id_key"', 'Tenant B admin cannot add a profile that already belongs to Tenant A');
+CREATE TEMP TABLE tenant_b_member_invite AS SELECT * FROM public.create_organization_member_invite('admin-a@test.invalid','viewer');
+RESET ROLE;
+
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000001","email":"admin-a@test.invalid","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT throws_ok(format('SELECT public.redeem_organization_member_invite(%L)',(SELECT raw_token FROM tenant_b_member_invite)), '23505', 'account already has organization membership', 'Tenant A member cannot redeem a Tenant B invitation');
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', true);

@@ -30,6 +30,7 @@ const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ 
 const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ default: m.PublicPassport })));
 const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
 const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })));
+const TeamJoin = lazy(() => import("./pages/TeamJoin").then(m => ({ default: m.TeamJoin })));
 const Billing = lazy(() => import("./pages/Billing").then(m => ({ default: m.Billing })));
 const AuditLogPage = lazy(() => import("./pages/AuditLog").then(m => ({ default: m.AuditLogPage })));
 
@@ -107,6 +108,11 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, [queryClient]);
+
+  // Public internal-team invite route — accessible without authentication.
+  if (location.startsWith("/team/join")) {
+    return <Suspense fallback={<DarkSpinner fullScreen />}><TeamJoin /></Suspense>;
+  }
 
   // Public supplier invite route — accessible without authentication
   if (location.startsWith("/join")) {

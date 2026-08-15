@@ -52,20 +52,30 @@ SELECT throws_ok($$UPDATE public.audit_logs SET action='rewritten'$$,'42501',NUL
 SELECT throws_ok($$DELETE FROM public.audit_logs$$,'42501',NULL,'client cannot delete audit history');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE organization_id='a1000000-0000-0000-0000-000000000001'),1::bigint,'same-organization admin reads audit events');
 
-SELECT lives_ok($$INSERT INTO public.organization_members(id,organization_id,profile_id,role) VALUES('a2000000-0000-0000-0000-000000000005','a1000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000005','manager')$$,'admin adds member through authoritative mutation');
-SELECT lives_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='a2000000-0000-0000-0000-000000000005'$$,'admin changes member role');
-SELECT lives_ok($$UPDATE public.organization_members SET role=role WHERE id='a2000000-0000-0000-0000-000000000005'$$,'membership no-op succeeds');
-SELECT lives_ok($$DELETE FROM public.organization_members WHERE id='a2000000-0000-0000-0000-000000000005'$$,'admin removes member');
-SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_added' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name='a2000000-0000-0000-0000-000000000005'),1::bigint,'member addition records exactly one correct actor and membership ID');
-SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_role_changed' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name='a2000000-0000-0000-0000-000000000005'),1::bigint,'only the real role change records one event');
-SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_removed' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name='a2000000-0000-0000-0000-000000000005'),1::bigint,'member removal records exactly one correct actor and membership ID');
+CREATE TEMP TABLE audit_member_invite AS SELECT * FROM public.create_organization_member_invite('audit-member@test.invalid','manager');
+RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true);
+SELECT set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000005","email":"audit-member@test.invalid","role":"authenticated"}',true);
+SET LOCAL ROLE authenticated;
+SELECT lives_ok(format('SELECT public.redeem_organization_member_invite(%L)',(SELECT raw_token FROM audit_member_invite)),'invitee redeems membership through authoritative RPC');
+RESET ROLE;
+SELECT set_config('test.audit_member_id',(SELECT m.id::text FROM public.organization_members AS m WHERE m.profile_id='a0000000-0000-0000-0000-000000000005'),true);
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true);
+SELECT set_config('request.jwt.claims','{"sub":"a0000000-0000-0000-0000-000000000001","email":"audit-admin-a@test.invalid","role":"authenticated"}',true);
+SET LOCAL ROLE authenticated;
+SELECT lives_ok(format('SELECT public.update_organization_member_role(%L,%L,%L)',current_setting('test.audit_member_id')::uuid,'viewer','Audit role change'),'admin changes member role through RPC');
+SELECT lives_ok(format('SELECT public.update_organization_member_role(%L,%L,%L)',current_setting('test.audit_member_id')::uuid,'viewer','Audit same-role no-op'),'membership RPC no-op succeeds');
+SELECT lives_ok(format('SELECT public.revoke_organization_member_access(%L,%L)',current_setting('test.audit_member_id')::uuid,'Audit access revocation'),'admin removes member through RPC');
+SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_added' AND profile_id='a0000000-0000-0000-0000-000000000005' AND entity_name=current_setting('test.audit_member_id')),1::bigint,'member addition records exactly one invitee actor and membership ID');
+SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_role_changed' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name=current_setting('test.audit_member_id')),1::bigint,'only the real role change records one admin event');
+SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_removed' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name=current_setting('test.audit_member_id')),1::bigint,'member removal records exactly one admin actor and membership ID');
 SELECT lives_ok($$UPDATE public.organizations SET name='Audit Tenant A updated' WHERE id='a1000000-0000-0000-0000-000000000001'$$,'admin updates organization settings');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_updated' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name='a1000000-0000-0000-0000-000000000001'),1::bigint,'meaningful organization update is audited');
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000002',true);
 SET LOCAL ROLE authenticated;
-SELECT is((SELECT count(*) FROM public.audit_logs WHERE organization_id='a1000000-0000-0000-0000-000000000001'),5::bigint,'same-organization manager reads audit events');
+SELECT is((SELECT count(*) FROM public.audit_logs WHERE organization_id='a1000000-0000-0000-0000-000000000001'),8::bigint,'same-organization manager reads the complete server-owned audit lifecycle');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE organization_id='a1000000-0000-0000-0000-000000000002'),0::bigint,'manager cannot read another tenant audit events');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_updated'),1::bigint,'failed manager organization mutation emitted no false event');
 RESET ROLE;

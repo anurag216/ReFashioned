@@ -577,6 +577,83 @@ export type Database = {
           },
         ]
       }
+      organization_member_invites: {
+        Row: {
+          created_at: string
+          created_by: string
+          email: string
+          expires_at: string
+          id: string
+          organization_id: string
+          redeemed_at: string | null
+          redeemed_by: string | null
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          role: string
+          token_hash: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          email: string
+          expires_at?: string
+          id?: string
+          organization_id: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role: string
+          token_hash: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          organization_id?: string
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          role?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "organization_member_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_member_invites_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_member_invites_redeemed_by_fkey"
+            columns: ["redeemed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organization_member_invites_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organization_members: {
         Row: {
           id: string
@@ -1039,6 +1116,16 @@ export type Database = {
           upload_expires_at: string
         }[]
       }
+      create_organization_member_invite: {
+        Args: { p_email: string; p_role: string }
+        Returns: {
+          email: string
+          expires_at: string
+          invite_id: string
+          raw_token: string
+          role: string
+        }[]
+      }
       create_organization_with_admin: {
         Args: { organization_name: string }
         Returns: string
@@ -1124,6 +1211,20 @@ export type Database = {
           stage_name: string
         }[]
       }
+      get_organization_access_admin_view: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_organization_member_invite_metadata: {
+        Args: { p_token: string }
+        Returns: {
+          expiration: string
+          invitation_state: string
+          masked_email: string
+          organization_name: string
+          role: string
+        }[]
+      }
       get_product_passport_publication_state: {
         Args: { p_product_id: string }
         Returns: {
@@ -1199,6 +1300,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      redeem_organization_member_invite: {
+        Args: { p_token: string }
+        Returns: string
+      }
       redeem_supplier_invite: {
         Args: { p_token: string }
         Returns: undefined
@@ -1213,6 +1318,14 @@ export type Database = {
       }
       revoke_certification: {
         Args: { p_certification_id: string }
+        Returns: undefined
+      }
+      revoke_organization_member_access: {
+        Args: { p_member_id: string; p_reason: string }
+        Returns: undefined
+      }
+      revoke_organization_member_invite: {
+        Args: { p_invite_id: string; p_reason?: string }
         Returns: undefined
       }
       revoke_supplier_access: {
@@ -1237,6 +1350,10 @@ export type Database = {
       }
       unpublish_product_passport: {
         Args: { p_product_id: string }
+        Returns: undefined
+      }
+      update_organization_member_role: {
+        Args: { p_member_id: string; p_new_role: string; p_reason: string }
         Returns: undefined
       }
       update_supplier_contact: {
