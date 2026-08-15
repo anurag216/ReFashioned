@@ -160,7 +160,7 @@ BEGIN
   FROM public.organization_members AS m
   WHERE m.profile_id=v_actor AND m.role='admin';
   IF v_org IS NULL THEN RAISE EXCEPTION 'administrator access required' USING ERRCODE='42501'; END IF;
-  IF length(coalesce(v_reason,'')) NOT BETWEEN 3 AND 500 THEN RAISE EXCEPTION 'revocation reason must be 3 to 500 characters' USING ERRCODE='22023'; END IF;
+  IF length(coalesce(v_reason,'')) NOT BETWEEN 3 AND 463 THEN RAISE EXCEPTION 'revocation reason must be 3 to 463 characters' USING ERRCODE='22023'; END IF;
   DELETE FROM public.organization_members AS m WHERE m.id=p_member_id AND m.organization_id=v_org;
   GET DIAGNOSTICS v_count=ROW_COUNT; IF v_count<>1 THEN RAISE EXCEPTION 'organization member not found' USING ERRCODE='P0002'; END IF;
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_access_revoked','organization_member',p_member_id::text||':'||v_reason);

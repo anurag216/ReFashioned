@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(56);
+SELECT plan(57);
 
 SELECT ok((SELECT indisunique FROM pg_catalog.pg_index WHERE indexrelid='public.organization_member_invites_pending_email_idx'::regclass),'pending organization/email invitation index is unique');
 SELECT ok(has_function_privilege('anon','public.get_organization_member_invite_metadata(text)','EXECUTE'),'anon can execute only the safe team invitation metadata contract');
@@ -147,6 +147,7 @@ SELECT lives_ok($$SELECT public.update_organization_member_role('a2000000-0000-0
 SELECT lives_ok($$SELECT public.update_organization_member_role('a2000000-0000-0000-0000-000000000003','viewer','manager downgrade')$$,'admin can change manager to viewer');
 SELECT lives_ok($$SELECT public.update_organization_member_role('a2000000-0000-0000-0000-000000000003','admin','admin promotion')$$,'admin can promote a member to admin');
 SELECT throws_ok($$SELECT public.update_organization_member_role('a2000000-0000-0000-0000-000000000005','viewer','cross tenant')$$,'P0002',NULL,'admin cannot change another tenant member');
+SELECT throws_ok(format('SELECT public.revoke_organization_member_access(%L,%L)',(SELECT id FROM public.organization_members WHERE profile_id='a0000000-0000-0000-0000-000000000004'),repeat('x',464)),'22023',NULL,'revocation reason exceeding audit-safe limit is rejected');
 SELECT lives_ok($$SELECT public.revoke_organization_member_access((SELECT id FROM public.organization_members WHERE profile_id='a0000000-0000-0000-0000-000000000004'),'employment ended')$$,'admin revokes internal access');
 RESET ROLE;
 -- The JWT is unchanged; authorization re-reads authoritative membership state.
