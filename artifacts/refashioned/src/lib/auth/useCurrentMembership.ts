@@ -41,5 +41,8 @@ export function useCurrentMembership(userId: string | null) {
     queryKey: currentMembershipQueryKey(userId),
     queryFn: () => fetchCurrentMembership(userId!),
     enabled: userId !== null,
+    staleTime: 30_000,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
 }

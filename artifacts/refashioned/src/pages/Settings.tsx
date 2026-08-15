@@ -3,6 +3,7 @@ import { Settings as SettingsIcon, User, Camera, CheckCircle2, AlertTriangle } f
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { useOrg } from "../lib/api/useOrg";
+import { TeamAccess } from "../components/TeamAccess";
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState("account");
@@ -48,6 +49,7 @@ export function Settings() {
 
   const tabs = [
     { id: "account", label: "Account Information" },
+    ...(isAdmin ? [{ id: "team", label: "Team Access" }] : []),
     { id: "notifications", label: "Notifications" },
     { id: "preferences", label: "Preferences" },
     { id: "api", label: "API Access" },
@@ -223,7 +225,8 @@ export function Settings() {
           </div>
         </div>
       )}
-      {activeTab !== "account" && (
+      {activeTab === "team" && isAdmin && <TeamAccess />}
+      {activeTab !== "account" && activeTab !== "team" && (
         <div className="bg-card rounded-lg p-12 shadow-sm border border-card-border text-center">
           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <SettingsIcon className="w-6 h-6 text-muted-foreground" />
