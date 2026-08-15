@@ -14,7 +14,7 @@ const basePayload = {
   materials: [{ name: "Cotton", percentage: 100 }],
   lifecycle: [{ order: 1, name: "Sourcing", summary: "Public summary", co2_kg: 0, water_l: 20, certifications: [{ name: "Stage Certificate" }] }],
 };
-const response = (payload: object) => ({ schema_version: 1, published_at: "2026-08-08T12:00:00Z", payload_generated_at: "2026-08-08T12:00:00Z", payload });
+const response = (payload: object, schemaVersion: 1 | 2 = 1) => ({ schema_version: schemaVersion, published_at: "2026-08-08T12:00:00Z", payload_generated_at: "2026-08-08T12:00:00Z", payload });
 
 describe("PublicPassport", () => {
   beforeEach(() => { vi.clearAllMocks(); });
@@ -37,9 +37,17 @@ describe("PublicPassport", () => {
     expect(await screen.findByText("Published Brand")).toBeInTheDocument();
     expect(screen.getByText("0 kg")).toBeInTheDocument();
     expect(screen.queryByText("Total water use")).not.toBeInTheDocument();
-    expect(screen.getByText("Stage Certificate")).toBeInTheDocument();
+    expect(screen.queryByText("Stage Certificate")).not.toBeInTheDocument();
     for (const forbidden of ["Supplier Secret", "Exact Location", "EcoThread", "Industry Avg"]) expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+  it("renders only server-curated v2 certification claims", async () => {
+    rpc.mockResolvedValue({ data: response({ ...basePayload, schema_version: 2, certifications: [{ name: "Organic Standard", valid_until: "2027-08-15" }] }, 2), error: null });
+    render(<PublicPassport publicSlug={"a".repeat(64)} />);
+    expect(await screen.findByText("Organic Standard")).toBeInTheDocument();
+    expect(screen.getByText("Verified")).toBeInTheDocument();
+    expect(screen.getByText("Valid until 2027-08-15")).toBeInTheDocument();
+    expect(screen.queryByText("Stage Certificate")).not.toBeInTheDocument();
   });
   it("omits impact cards when impact is unavailable", async () => {
     rpc.mockResolvedValue({ data: response(basePayload), error: null });

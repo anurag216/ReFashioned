@@ -240,25 +240,25 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     if (certificateFile) {
       setSavingLabel("Authorizing upload…");
       type Intent = { evidence_id: string; bucket_id: string; storage_path: string; upload_expires_at: string };
-      const callRpc = client.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: Intent[] | null; error: { message: string } | null }>;
-      const { data: intents, error: intentError } = await callRpc("create_evidence_upload_intent", {
+      const intentResult = await client.rpc("create_evidence_upload_intent", {
         p_lifecycle_stage_id: stageId,
         p_document_type: "certificate",
         p_original_filename: certificateFile.name,
         p_mime_type: certificateFile.type,
         p_size_bytes: certificateFile.size,
       });
+      const { data: intents, error: intentError } = intentResult as { data: Intent[] | null; error: { message: string } | null };
       const intent = intents?.[0];
       if (intentError || !intent) { setSaveError(`Stage saved. Evidence upload authorization failed: ${intentError?.message ?? "try again"}`); setSaving(false); return; }
       setSavingLabel("Uploading evidence…");
       const { error: uploadError } = await client.storage.from(intent.bucket_id)
         .upload(intent.storage_path, certificateFile, { upsert: false, contentType: certificateFile.type });
       if (uploadError) {
-        await callRpc("cancel_evidence_upload_intent", { p_evidence_id: intent.evidence_id }).catch(() => undefined);
+        await Promise.resolve(client.rpc("cancel_evidence_upload_intent", { p_evidence_id: intent.evidence_id })).catch(() => undefined);
         setSaveError(`Stage saved. Evidence upload failed: ${uploadError.message}. Retry to reuse this stage.`); setSaving(false); return;
       }
       setSavingLabel("Finalizing evidence…");
-      const { error: finalizeError } = await callRpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
+      const { error: finalizeError } = await client.rpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
       if (finalizeError) { setSaveError(`Stage saved. Evidence finalization failed: ${finalizeError.message}. Retry finalization before starting another upload.`); setSaving(false); return; }
     }
     setShowAddModal(false);

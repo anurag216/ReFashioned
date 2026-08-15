@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT plan(57);
+SELECT plan(74);
 
 INSERT INTO auth.users(id,instance_id,aud,role,email) VALUES
  ('90000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','dpp-admin-a@test.invalid'),
@@ -108,6 +108,38 @@ SELECT lives_ok($$SELECT public.rotate_product_passport_slug('93000000-0000-0000
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='passport_slug_rotated'),1::bigint,'rotation audited');
 SELECT isnt(public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001')),NULL::jsonb,'new slug resolves');
 SELECT lives_ok($$SET LOCAL ROLE service_role; UPDATE public.digital_product_passports SET updated_at=clock_timestamp() WHERE product_id='93000000-0000-0000-0000-000000000001'; RESET ROLE$$,'service role write remains possible');
+
+-- Evidence-backed certification membership is deliberate, while validity fails closed.
+INSERT INTO public.suppliers(id,organization_id,name) VALUES
+ ('95000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','Private Supplier');
+INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes,uploaded_at,reviewed_by,reviewed_at) VALUES
+ ('96000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','95000000-0000-0000-0000-000000000001','94000000-0000-0000-0000-000000000001','evidence/96000000-0000-0000-0000-000000000001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf','certificate','approved','90000000-0000-0000-0000-000000000001','claim-one.pdf','application/pdf',100,now(),'90000000-0000-0000-0000-000000000001',now());
+SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
+CREATE TEMP TABLE first_claim AS SELECT public.create_certification_from_evidence('96000000-0000-0000-0000-000000000001','Organic Standard',current_date+30) id;
+RESET ROLE;
+SELECT is((public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))#>'{payload,certifications}'),'[]'::jsonb,'manager-created claim is not public before admin republish');
+SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
+SELECT is((SELECT has_unpublished_changes FROM public.get_product_passport_publication_state('93000000-0000-0000-0000-000000000001')),true,'new certification creates dirty state');
+SELECT lives_ok($$SELECT public.publish_product_passport('93000000-0000-0000-0000-000000000001')$$,'admin republish admits certification'); RESET ROLE;
+SELECT is((SELECT payload_version FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'),2,'republish stores v2');
+SELECT is((SELECT published_certification_ids FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'),ARRAY[(SELECT id FROM first_claim)]::uuid[],'membership snapshot stores exact certification set');
+SELECT is((public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))#>'{payload,certifications,0}'),jsonb_build_object('name','Organic Standard','valid_until',(current_date+30)),'public claim contains only name and validity');
+SELECT ok(public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))::text !~ '(96000000|95000000|organization_id|supplier_id|evidence_id|certification_id|storage_path)','public JSON leaks no internal claim identifiers');
+SET LOCAL ROLE anon; SELECT throws_ok($$SELECT published_certification_ids FROM public.digital_product_passports$$,'42501',NULL,'anon cannot read private membership'); RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
+SELECT lives_ok(format('SELECT public.revoke_certification(%L)',(SELECT id FROM first_claim)),'manager revokes published certification'); RESET ROLE;
+SELECT isnt(public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001')),NULL::jsonb,'passport remains available after revocation');
+SELECT is((public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))#>'{payload,certifications}'),'[]'::jsonb,'revoked claim disappears without republish');
+SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
+SELECT is((SELECT has_unpublished_changes FROM public.get_product_passport_publication_state('93000000-0000-0000-0000-000000000001')),true,'revocation leaves formal snapshot dirty'); RESET ROLE;
+UPDATE public.certifications SET verification_status='verified',revoked_at=NULL,revoked_by=NULL,expiry_date=current_date-1 WHERE id=(SELECT id FROM first_claim);
+SELECT is((public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))#>'{payload,certifications}'),'[]'::jsonb,'expired admitted claim disappears without republish');
+UPDATE public.digital_product_passports SET payload_version=1,public_payload=jsonb_set(public_payload,'{schema_version}','1'::jsonb)-'certifications',published_certification_ids='{}' WHERE product_id='93000000-0000-0000-0000-000000000001';
+SELECT is((public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))#>>'{payload,schema_version}'),'1','v1 snapshot still resolves without retroactive claims');
+SELECT ok(NOT ((public.get_public_product_passport((SELECT public_slug FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'))#>'{payload}') ? 'certifications'),'v1 snapshot receives no certification field');
+SELECT set_config('request.jwt.claim.sub','90000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
+SELECT lives_ok($$SELECT public.publish_product_passport('93000000-0000-0000-0000-000000000001')$$,'v1 republish upgrades safely'); RESET ROLE;
+SELECT is((SELECT payload_version FROM public.digital_product_passports WHERE product_id='93000000-0000-0000-0000-000000000001'),2,'v1 republish becomes v2');
 
 SELECT * FROM finish();
 ROLLBACK;

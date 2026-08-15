@@ -4,11 +4,18 @@ import { readFileSync } from "node:fs";
 const publicSource = readFileSync(`${process.cwd()}/src/pages/PublicPassport.tsx`, "utf8");
 const internalSource = readFileSync(`${process.cwd()}/src/pages/DigitalProductPassport.tsx`, "utf8");
 const appSource = readFileSync(`${process.cwd()}/src/App.tsx`, "utf8");
+const traceabilitySource = readFileSync(`${process.cwd()}/src/pages/Traceability.tsx`, "utf8");
 
 describe("public DPP data boundary", () => {
   it("treats the route value as a public slug", () => {
     expect(appSource).toContain("<PublicPassport publicSlug={publicSlug}");
     expect(appSource).not.toContain("<PublicPassport productId=");
+  });
+  it("keeps every evidence upload RPC receiver-bound", () => {
+    for (const rpc of ["create_evidence_upload_intent", "cancel_evidence_upload_intent", "finalize_evidence_upload"]) {
+      expect(traceabilitySource).toContain(`client.rpc("${rpc}"`);
+    }
+    expect(traceabilitySource).not.toMatch(/const\s+\w+\s*=\s*(?:client|supabase)\.rpc(?:\s+as\b|\s*;)/);
   });
   it("uses only the curated public RPC", () => {
     expect(publicSource).toContain('supabase.rpc("get_public_product_passport"');
