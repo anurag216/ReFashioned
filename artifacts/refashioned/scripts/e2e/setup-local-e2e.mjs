@@ -30,6 +30,10 @@ const SUPPLIER_USER = {
   id: "e2e10000-0000-4000-8000-000000000005",
   email: "supplier-user@e2e.local",
 };
+const TEAM_MEMBER_USER = {
+  id: "e2e10000-0000-4000-8000-000000000007",
+  email: "team-manager@e2e.local",
+};
 const PRODUCT_A_ID = "e2e30000-0000-4000-8000-000000000001";
 const SUPPLIER_A_ID = "e2e40000-0000-4000-8000-000000000001";
 const LIFECYCLE_STAGE_ID = "e2e50000-0000-4000-8000-000000000001";
@@ -45,7 +49,7 @@ function assertOk(error, operation) {
 const { data: listed, error: listError } = await client.auth.admin.listUsers({ page: 1, perPage: 1000 });
 assertOk(listError, "list local auth users");
 
-for (const fixture of [...USERS, SUPPLIER_USER]) {
+for (const fixture of [...USERS, SUPPLIER_USER, TEAM_MEMBER_USER]) {
   const existing = listed.users.find(user => user.email === fixture.email);
   if (existing) {
     const { error } = await client.auth.admin.updateUserById(existing.id, { password: E2E_PASSWORD, email_confirm: true });
@@ -82,12 +86,25 @@ assertOk((await client.from("profiles").upsert({
   role: "brand_admin",
 })).error, "upsert external supplier profile");
 
+assertOk((await client.from("profiles").upsert({
+  id: TEAM_MEMBER_USER.id,
+  email: TEAM_MEMBER_USER.email,
+  full_name: "E2E Invited Team Manager",
+  role: "sustainability_manager",
+})).error, "upsert invited team profile");
+
 assertOk((await client.from("organization_members").upsert(USERS.map((user, index) => ({
   id: `e2e20000-0000-4000-8000-00000000000${index + 1}`,
   profile_id: user.id,
   organization_id: user.organization_id,
   role: user.role,
 })), { onConflict: "organization_id,profile_id" })).error, "upsert memberships");
+
+// This dedicated identity starts authenticated but unauthorized. The browser
+// lifecycle must create its membership by redeeming a real team invitation.
+assertOk((await client.from("organization_members").delete().eq("profile_id", TEAM_MEMBER_USER.id)).error, "clear invited team membership");
+assertOk((await client.from("supplier_access_memberships").delete().eq("profile_id", TEAM_MEMBER_USER.id)).error, "clear invited team supplier access");
+assertOk((await client.from("organization_member_invites").delete().eq("email", TEAM_MEMBER_USER.email)).error, "clear invited team invitations");
 
 assertOk((await client.from("products").upsert([
   { id: PRODUCT_A_ID, organization_id: ORGANIZATIONS.a, name: "Tenant A Product", sku: "TENANT-A", season: "Evergreen", status: "draft" },

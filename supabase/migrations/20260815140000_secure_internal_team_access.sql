@@ -27,7 +27,7 @@ CREATE TABLE public.organization_member_invites (
 );
 CREATE INDEX organization_member_invites_org_created_idx
   ON public.organization_member_invites(organization_id,created_at DESC);
-CREATE INDEX organization_member_invites_pending_email_idx
+CREATE UNIQUE INDEX organization_member_invites_pending_email_idx
   ON public.organization_member_invites(organization_id,email)
   WHERE redeemed_at IS NULL AND revoked_at IS NULL;
 ALTER TABLE public.organization_member_invites ENABLE ROW LEVEL SECURITY;
@@ -41,7 +41,7 @@ REVOKE INSERT,UPDATE,DELETE ON public.organization_members FROM anon,authenticat
 
 CREATE FUNCTION public.create_organization_member_invite(p_email text,p_role text)
 RETURNS TABLE(invite_id uuid,raw_token text,expires_at timestamptz,role text,email text)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,extensions AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_email text:=lower(btrim(p_email)); v_token text; v_id uuid; v_exp timestamptz; v_old uuid;
 BEGIN
   SELECT organization_id INTO v_org FROM public.organization_members WHERE profile_id=v_actor AND role='admin';
@@ -56,32 +56,32 @@ BEGIN
     UPDATE public.organization_member_invites SET revoked_at=now(),revoked_by=v_actor,revoke_reason='Replaced by a newer invitation' WHERE id=v_old;
     INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_invite_replaced','organization_member_invite',v_old::text);
   END IF;
-  v_token:=encode(gen_random_bytes(32),'hex'); v_exp:=now()+interval '7 days';
+  v_token:=pg_catalog.encode(extensions.gen_random_bytes(32),'hex'); v_exp:=now()+interval '7 days';
   INSERT INTO public.organization_member_invites(organization_id,email,role,token_hash,created_by,expires_at)
-    VALUES(v_org,v_email,p_role,encode(digest(v_token,'sha256'),'hex'),v_actor,v_exp) RETURNING id INTO v_id;
+    VALUES(v_org,v_email,p_role,pg_catalog.encode(extensions.digest(v_token,'sha256'),'hex'),v_actor,v_exp) RETURNING id INTO v_id;
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_invite_created','organization_member_invite',v_id::text);
   RETURN QUERY SELECT v_id,v_token,v_exp,p_role,v_email;
 END $$;
 
 CREATE FUNCTION public.get_organization_member_invite_metadata(p_token text)
 RETURNS TABLE(invitation_state text,organization_name text,masked_email text,role text,expiration timestamptz)
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public,extensions AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v record;
 BEGIN
   IF p_token IS NULL OR p_token !~ '^[0-9a-f]{64}$' THEN RETURN QUERY SELECT 'invalid'::text,NULL::text,NULL::text,NULL::text,NULL::timestamptz; RETURN; END IF;
-  SELECT i.*,o.name INTO v FROM public.organization_member_invites i JOIN public.organizations o ON o.id=i.organization_id WHERE i.token_hash=encode(digest(p_token,'sha256'),'hex');
+  SELECT i.*,o.name INTO v FROM public.organization_member_invites i JOIN public.organizations o ON o.id=i.organization_id WHERE i.token_hash=pg_catalog.encode(extensions.digest(p_token,'sha256'),'hex');
   IF NOT FOUND THEN RETURN QUERY SELECT 'invalid'::text,NULL::text,NULL::text,NULL::text,NULL::timestamptz; RETURN; END IF;
   RETURN QUERY SELECT CASE WHEN v.redeemed_at IS NOT NULL THEN 'redeemed' WHEN v.revoked_at IS NOT NULL THEN 'revoked' WHEN v.expires_at<=now() THEN 'expired' ELSE 'usable' END,
     v.name,regexp_replace(v.email,'^(.).*(@.*)$','\1***\2'),v.role,v.expires_at;
 END $$;
 
 CREATE FUNCTION public.redeem_organization_member_invite(p_token text)
-RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,extensions AS $$
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_actor uuid:=auth.uid(); v_email text:=lower(btrim(coalesce(auth.jwt()->>'email',''))); v record; v_member uuid;
 BEGIN
   IF v_actor IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
   IF p_token IS NULL OR p_token !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid invitation' USING ERRCODE='22023'; END IF;
-  SELECT * INTO v FROM public.organization_member_invites WHERE token_hash=encode(digest(p_token,'sha256'),'hex') FOR UPDATE;
+  SELECT * INTO v FROM public.organization_member_invites WHERE token_hash=pg_catalog.encode(extensions.digest(p_token,'sha256'),'hex') FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'invalid invitation' USING ERRCODE='22023'; END IF;
   IF v.revoked_at IS NOT NULL OR v.redeemed_at IS NOT NULL OR v.expires_at<=now() THEN RAISE EXCEPTION 'invitation is no longer usable' USING ERRCODE='55000'; END IF;
   IF v_email='' OR v_email IS DISTINCT FROM v.email THEN RAISE EXCEPTION 'authenticated email does not match invitation' USING ERRCODE='42501'; END IF;
@@ -96,7 +96,7 @@ BEGIN
 END $$;
 
 CREATE FUNCTION public.get_organization_access_admin_view()
-RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_result jsonb;
 BEGIN
   SELECT organization_id INTO v_org FROM public.organization_members WHERE profile_id=v_actor AND role='admin';
@@ -108,39 +108,40 @@ BEGIN
 END $$;
 
 CREATE FUNCTION public.revoke_organization_member_invite(p_invite_id uuid,p_reason text DEFAULT 'Revoked by administrator')
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_count integer;
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_count integer; v_reason text:=btrim(p_reason);
 BEGIN
   SELECT organization_id INTO v_org FROM public.organization_members WHERE profile_id=v_actor AND role='admin';
-  IF v_org IS NULL OR length(btrim(coalesce(p_reason,'')))<3 THEN RAISE EXCEPTION 'administrator access and a reason are required' USING ERRCODE='42501'; END IF;
-  UPDATE public.organization_member_invites SET revoked_at=now(),revoked_by=v_actor,revoke_reason=btrim(p_reason) WHERE id=p_invite_id AND organization_id=v_org AND redeemed_at IS NULL AND revoked_at IS NULL;
+  IF v_org IS NULL THEN RAISE EXCEPTION 'administrator access required' USING ERRCODE='42501'; END IF;
+  IF length(coalesce(v_reason,'')) NOT BETWEEN 3 AND 500 THEN RAISE EXCEPTION 'reason must be 3 to 500 characters' USING ERRCODE='22023'; END IF;
+  UPDATE public.organization_member_invites SET revoked_at=now(),revoked_by=v_actor,revoke_reason=v_reason WHERE id=p_invite_id AND organization_id=v_org AND redeemed_at IS NULL AND revoked_at IS NULL;
   GET DIAGNOSTICS v_count=ROW_COUNT; IF v_count<>1 THEN RAISE EXCEPTION 'usable invitation not found' USING ERRCODE='P0002'; END IF;
   INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_invite_revoked','organization_member_invite',p_invite_id::text);
 END $$;
 
 CREATE FUNCTION public.update_organization_member_role(p_member_id uuid,p_new_role text,p_reason text)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_old text;
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_old text; v_reason text:=btrim(p_reason);
 BEGIN
   SELECT organization_id INTO v_org FROM public.organization_members WHERE profile_id=v_actor AND role='admin';
   IF v_org IS NULL THEN RAISE EXCEPTION 'administrator access required' USING ERRCODE='42501'; END IF;
-  IF p_new_role NOT IN ('admin','manager','viewer') OR length(btrim(coalesce(p_reason,'')))<3 THEN RAISE EXCEPTION 'valid role and reason are required' USING ERRCODE='22023'; END IF;
+  IF p_new_role NOT IN ('admin','manager','viewer') OR length(coalesce(v_reason,'')) NOT BETWEEN 3 AND 500 THEN RAISE EXCEPTION 'valid role and a 3 to 500 character reason are required' USING ERRCODE='22023'; END IF;
   SELECT role INTO v_old FROM public.organization_members WHERE id=p_member_id AND organization_id=v_org FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'organization member not found' USING ERRCODE='P0002'; END IF;
   UPDATE public.organization_members SET role=p_new_role WHERE id=p_member_id;
-  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_role_changed','organization_member',p_member_id::text||':'||v_old||'->'||p_new_role||':'||btrim(p_reason));
+  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_role_changed','organization_member',p_member_id::text||':'||v_old||'->'||p_new_role||':'||v_reason);
 END $$;
 
 CREATE FUNCTION public.revoke_organization_member_access(p_member_id uuid,p_reason text)
-RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_count integer;
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_actor uuid:=auth.uid(); v_org uuid; v_count integer; v_reason text:=btrim(p_reason);
 BEGIN
   SELECT organization_id INTO v_org FROM public.organization_members WHERE profile_id=v_actor AND role='admin';
   IF v_org IS NULL THEN RAISE EXCEPTION 'administrator access required' USING ERRCODE='42501'; END IF;
-  IF length(btrim(coalesce(p_reason,'')))<3 THEN RAISE EXCEPTION 'revocation reason must be at least 3 characters' USING ERRCODE='22023'; END IF;
+  IF length(coalesce(v_reason,'')) NOT BETWEEN 3 AND 500 THEN RAISE EXCEPTION 'revocation reason must be 3 to 500 characters' USING ERRCODE='22023'; END IF;
   DELETE FROM public.organization_members WHERE id=p_member_id AND organization_id=v_org;
   GET DIAGNOSTICS v_count=ROW_COUNT; IF v_count<>1 THEN RAISE EXCEPTION 'organization member not found' USING ERRCODE='P0002'; END IF;
-  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_access_revoked','organization_member',p_member_id::text||':'||btrim(p_reason));
+  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_member_access_revoked','organization_member',p_member_id::text||':'||v_reason);
 END $$;
 
 GRANT EXECUTE ON FUNCTION public.get_organization_member_invite_metadata(text) TO anon,authenticated;
