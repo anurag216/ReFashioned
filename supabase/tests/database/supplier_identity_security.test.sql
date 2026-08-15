@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(107);
+SELECT plan(108);
 
 SELECT has_table('public','supplier_access_memberships','supplier access membership table exists');
 SELECT hasnt_column('public','supplier_contacts','profile_id','contact metadata is not an authorization credential');
@@ -227,6 +227,7 @@ SELECT set_config('request.jwt.claims',jsonb_build_object('sub','b0000000-0000-0
 SET LOCAL ROLE authenticated;
 SELECT is((SELECT count(*) FROM public.get_my_supplier_access()),1::bigint,'active supplier receives workspace access');
 SELECT lives_ok($$SELECT * FROM public.get_my_supplier_evidence_tasks()$$,'active supplier receives evidence tasks');
+SELECT is((SELECT count(*) FROM public.get_my_supplier_evidence_tasks()),1::bigint,'active supplier receives its assigned evidence task');
 SELECT is(public.current_actor_can_upload_evidence('b5000000-0000-0000-0000-000000000001'),true,'active supplier has upload authorization');
 SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-000000000001'),true,'current actor helper recognizes own active supplier');
 SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-000000000002'),false,'current actor helper rejects another supplier');

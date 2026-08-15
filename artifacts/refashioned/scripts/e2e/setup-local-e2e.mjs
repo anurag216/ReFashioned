@@ -29,6 +29,8 @@ const SUPPLIER_USER = {
   id: "e2e10000-0000-4000-8000-000000000005",
   email: "supplier-user@e2e.local",
 };
+const PRODUCT_A_ID = "e2e30000-0000-4000-8000-000000000001";
+const SUPPLIER_A_ID = "e2e40000-0000-4000-8000-000000000001";
 const LIFECYCLE_STAGE_ID = "e2e50000-0000-4000-8000-000000000001";
 
 function assertOk(error, operation) {
@@ -83,12 +85,12 @@ assertOk((await client.from("organization_members").upsert(USERS.map((user, inde
 })), { onConflict: "organization_id,profile_id" })).error, "upsert memberships");
 
 assertOk((await client.from("products").upsert([
-  { id: "e2e30000-0000-4000-8000-000000000001", organization_id: ORGANIZATIONS.a, name: "Tenant A Product", sku: "TENANT-A", season: "Evergreen", status: "draft" },
+  { id: PRODUCT_A_ID, organization_id: ORGANIZATIONS.a, name: "Tenant A Product", sku: "TENANT-A", season: "Evergreen", status: "draft" },
   { id: "e2e30000-0000-4000-8000-000000000002", organization_id: ORGANIZATIONS.b, name: "Tenant B Secret Product", sku: "TENANT-B", season: "Evergreen", status: "draft" },
 ])).error, "upsert products");
 
 assertOk((await client.from("suppliers").upsert({
-  id: "e2e40000-0000-4000-8000-000000000001",
+  id: SUPPLIER_A_ID,
   organization_id: ORGANIZATIONS.a,
   name: "Tenant A Supplier",
   location: "Local E2E",
@@ -107,10 +109,38 @@ assertOk((await client.from("evidence_uploads").delete().eq("lifecycle_stage_id"
 assertOk((await client.from("lifecycle_stages").upsert({
   id: LIFECYCLE_STAGE_ID,
   organization_id: ORGANIZATIONS.a,
-  product_id: "e2e30000-0000-4000-8000-000000000001",
-  supplier_id: "e2e40000-0000-4000-8000-000000000001",
+  product_id: PRODUCT_A_ID,
+  supplier_id: SUPPLIER_A_ID,
   stage_name: "E2E Material Production",
   stage_order: 1,
 })).error, "upsert supplier evidence lifecycle stage");
+
+const [stageResult, productResult, supplierResult, organizationResult] = await Promise.all([
+  client.from("lifecycle_stages").select("id,organization_id,product_id,supplier_id,stage_name").eq("id", LIFECYCLE_STAGE_ID).single(),
+  client.from("products").select("id,organization_id,name,status").eq("id", PRODUCT_A_ID).single(),
+  client.from("suppliers").select("id,organization_id,name").eq("id", SUPPLIER_A_ID).single(),
+  client.from("organizations").select("id,name").eq("id", ORGANIZATIONS.a).single(),
+]);
+assertOk(stageResult.error, "verify supplier evidence lifecycle stage");
+assertOk(productResult.error, "verify supplier evidence product");
+assertOk(supplierResult.error, "verify supplier evidence supplier");
+assertOk(organizationResult.error, "verify supplier evidence organization");
+
+const fixtureIsConsistent =
+  stageResult.data.id === LIFECYCLE_STAGE_ID &&
+  stageResult.data.organization_id === ORGANIZATIONS.a &&
+  stageResult.data.product_id === PRODUCT_A_ID &&
+  stageResult.data.supplier_id === SUPPLIER_A_ID &&
+  stageResult.data.stage_name === "E2E Material Production" &&
+  productResult.data.id === PRODUCT_A_ID &&
+  productResult.data.organization_id === ORGANIZATIONS.a &&
+  productResult.data.name === "Tenant A Product" &&
+  productResult.data.status !== "archived" &&
+  supplierResult.data.id === SUPPLIER_A_ID &&
+  supplierResult.data.organization_id === ORGANIZATIONS.a &&
+  supplierResult.data.name === "Tenant A Supplier" &&
+  organizationResult.data.id === ORGANIZATIONS.a &&
+  organizationResult.data.name === "Tenant A";
+if (!fixtureIsConsistent) throw new Error("supplier evidence fixture relationships are inconsistent");
 
 console.log("Local E2E fixtures are ready.");

@@ -15,6 +15,9 @@ async function closeContext(context: BrowserContext | undefined) {
   if (context) await context.close();
 }
 
+test.describe("supplier lifecycle", () => {
+test.describe.configure({ retries: 0 });
+
 test("supplier invitation, evidence, and revocation lifecycle", async ({ browser, baseURL }) => {
   const password = process.env.PLAYWRIGHT_E2E_PASSWORD;
   const adminEmail = process.env.PLAYWRIGHT_ADMIN_EMAIL;
@@ -66,8 +69,20 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     await supplierPage.getByLabel("Password").fill(password);
     await supplierPage.getByRole("button", { name: "Sign in" }).click();
     await expect(supplierPage.getByText(`Signed in as ${supplierEmail}`)).toBeVisible();
+    const tasksResponsePromise = supplierPage.waitForResponse(response =>
+      response.url().includes("/rpc/get_my_supplier_evidence_tasks"),
+    );
     await supplierPage.getByRole("button", { name: "Accept supplier invitation" }).click();
     await supplierPage.waitForURL("**/supplier");
+    const tasksResponse = await tasksResponsePromise;
+    expect(tasksResponse.ok()).toBeTruthy();
+    const initialTasks = await tasksResponse.json() as Array<Record<string, unknown>>;
+    expect(initialTasks).toContainEqual(expect.objectContaining({
+      product_name: PRODUCT_NAME,
+      stage_name: STAGE_NAME,
+      document_requirement: "Evidence document",
+      evidence_status: null,
+    }));
 
     await expect(supplierPage.getByRole("heading", { name: "Supplier access active" })).toBeVisible();
     await expect(supplierPage.getByText(`${SUPPLIER_NAME} · signed in as ${supplierEmail}`)).toBeVisible();
@@ -134,4 +149,5 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     await closeContext(supplierContext);
     await closeContext(adminContext);
   }
+});
 });
