@@ -365,9 +365,11 @@ export type Database = {
       }
       evidence_uploads: {
         Row: {
+          content_sha256: string | null
           created_at: string | null
           document_type: string | null
           id: string
+          integrity_legacy_accepted: boolean
           legacy_migrated: boolean
           lifecycle_stage_id: string
           mime_type: string
@@ -376,6 +378,11 @@ export type Database = {
           rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          scan_completed_at: string | null
+          scan_engine: string | null
+          scan_result: string | null
+          scan_started_at: string | null
+          scan_status: string
           size_bytes: number
           status: string | null
           storage_bucket: string
@@ -389,9 +396,11 @@ export type Database = {
           uploaded_by: string | null
         }
         Insert: {
+          content_sha256?: string | null
           created_at?: string | null
           document_type?: string | null
           id?: string
+          integrity_legacy_accepted?: boolean
           legacy_migrated?: boolean
           lifecycle_stage_id: string
           mime_type: string
@@ -400,6 +409,11 @@ export type Database = {
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          scan_completed_at?: string | null
+          scan_engine?: string | null
+          scan_result?: string | null
+          scan_started_at?: string | null
+          scan_status?: string
           size_bytes: number
           status?: string | null
           storage_bucket?: string
@@ -413,9 +427,11 @@ export type Database = {
           uploaded_by?: string | null
         }
         Update: {
+          content_sha256?: string | null
           created_at?: string | null
           document_type?: string | null
           id?: string
+          integrity_legacy_accepted?: boolean
           legacy_migrated?: boolean
           lifecycle_stage_id?: string
           mime_type?: string
@@ -424,6 +440,11 @@ export type Database = {
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          scan_completed_at?: string | null
+          scan_engine?: string | null
+          scan_result?: string | null
+          scan_started_at?: string | null
+          scan_status?: string
           size_bytes?: number
           status?: string | null
           storage_bucket?: string
@@ -1078,6 +1099,7 @@ export type Database = {
           rejection_reason: string
           reviewed_at: string
           reviewed_by: string
+          scan_status: string
           uploaded_at: string
           uploaded_by: string
         }[]
@@ -1098,6 +1120,7 @@ export type Database = {
           lifecycle_stage_id: string
           product_name: string
           rejection_reason: string
+          scan_status: string
           stage_name: string
         }[]
       }
@@ -1160,6 +1183,21 @@ export type Database = {
           public_slug: string
           published_at: string
         }[]
+      }
+      record_evidence_scan_result: {
+        Args: {
+          p_content_sha256: string
+          p_declared_mime: string
+          p_detected_mime: string
+          p_evidence_id: string
+          p_scan_engine: string
+          p_scan_result: string
+          p_size_bytes: number
+          p_storage_bucket: string
+          p_storage_path: string
+          p_verdict: string
+        }
+        Returns: undefined
       }
       redeem_supplier_invite: {
         Args: { p_token: string }

@@ -90,7 +90,7 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     const task = supplierPage.getByRole("listitem").filter({ hasText: STAGE_NAME });
     await expect(task).toContainText(`${PRODUCT_NAME} — ${STAGE_NAME}`);
     await expect(task).toContainText("Evidence document");
-    await expect(task).toContainText("Status: not submitted");
+    await expect(task).toContainText(/Status:\s*Not submitted/i);
     await expect(supplierPage.locator("body")).not.toContainText(/Tenant B Secret Product|Tenant B organization|Tenant B supplier/i);
     await expect(supplierPage.getByRole("link", { name: /^dashboard$/i })).toHaveCount(0);
 

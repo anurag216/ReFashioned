@@ -1,12 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { requirePlaywrightAuthEnvironment } from "./authEnvironment";
 
 test("login and logout lifecycle completes cleanly", async ({ page }) => {
-  const { adminEmail, adminPassword } = requirePlaywrightAuthEnvironment();
+  const email = process.env.PLAYWRIGHT_LOGOUT_EMAIL;
+  const password = process.env.PLAYWRIGHT_E2E_PASSWORD;
+  if (!email || !password) throw new Error("Dedicated logout E2E identity is required");
   await page.goto("/");
 
-  await page.getByPlaceholder("you@company.com").fill(adminEmail);
-  await page.getByPlaceholder("••••••••").fill(adminPassword);
+  await page.getByPlaceholder("you@company.com").fill(email);
+  await page.getByPlaceholder("••••••••").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
 
   await page.waitForURL("**/dashboard", { timeout: 30_000 });

@@ -24,6 +24,7 @@ const USERS = [
   { id: "e2e10000-0000-4000-8000-000000000002", email: "manager@e2e.local", role: "manager", organization_id: ORGANIZATIONS.a },
   { id: "e2e10000-0000-4000-8000-000000000003", email: "viewer@e2e.local", role: "viewer", organization_id: ORGANIZATIONS.a },
   { id: "e2e10000-0000-4000-8000-000000000004", email: "admin-b@e2e.local", role: "admin", organization_id: ORGANIZATIONS.b },
+  { id: "e2e10000-0000-4000-8000-000000000006", email: "logout-user@e2e.local", role: "viewer", organization_id: ORGANIZATIONS.a },
 ];
 const SUPPLIER_USER = {
   id: "e2e10000-0000-4000-8000-000000000005",
