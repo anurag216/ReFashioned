@@ -37,3 +37,9 @@ The migration review found every declared FK to `public.profiles`/`auth.users`: 
 ## Deferred work
 
 An approved retention-policy catalogue, production job scheduling/retry operations, data exports, identity-provider-specific deletion verification, and an organization purge policy remain separate work. Organization deletion requests suspend access and public exposure; they do not hard-delete tenant records or audit history.
+
+Organization suspension is reversible: authorization rows and pending invitations
+are preserved, while every authorization decision consults the current lifecycle
+state and fails closed. `deletion_requested` additionally revokes pending
+invitations and unpublishes public DPP exposure, but still preserves memberships
+and business records for controlled reconciliation and later offboarding.

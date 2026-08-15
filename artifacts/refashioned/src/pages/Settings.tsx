@@ -64,9 +64,7 @@ export function Settings() {
     if (!supabase || !window.confirm("Request deletion of your account identity and access? This cannot be processed without additional verification.")) return;
     setErasureSubmitting(true); setErasureError(null);
     // The RPC has no subject argument: the database derives identity from auth.uid().
-    // Generated types are refreshed from local Supabase as part of database validation.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase.rpc as any)("request_personal_data_erasure");
+    const { data, error } = await supabase.rpc("request_personal_data_erasure");
     if (error) setErasureError(error.message);
     else setErasureStatus((data as { status?: string } | null)?.status ?? "requested");
     setErasureSubmitting(false);

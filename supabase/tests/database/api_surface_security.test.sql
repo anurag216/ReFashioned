@@ -73,13 +73,13 @@ SELECT ok(has_function_privilege('authenticated','public.create_supplier_invite(
 SELECT ok(has_function_privilege('anon','public.get_public_product_passport(text)','EXECUTE'),'public DPP RPC remains authorized');
 SELECT ok(has_function_privilege('authenticated','public.current_actor_can_upload_evidence(uuid)','EXECUTE'),'evidence authorization helper remains authorized');
 
-SELECT ok(NOT has_function_privilege('PUBLIC','public.request_personal_data_erasure()','EXECUTE'),'PUBLIC cannot request personal erasure');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.request_personal_data_erasure()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'PUBLIC cannot request personal erasure');
 SELECT ok(NOT has_function_privilege('anon','public.request_personal_data_erasure()','EXECUTE'),'anon cannot request personal erasure');
 SELECT ok(has_function_privilege('authenticated','public.request_personal_data_erasure()','EXECUTE'),'authenticated can request personal erasure');
-SELECT ok(NOT has_function_privilege('PUBLIC','public.request_organization_deletion()','EXECUTE'),'PUBLIC cannot request organization deletion');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.request_organization_deletion()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'PUBLIC cannot request organization deletion');
 SELECT ok(NOT has_function_privilege('anon','public.request_organization_deletion()','EXECUTE'),'anon cannot request organization deletion');
 SELECT ok(has_function_privilege('authenticated','public.request_organization_deletion()','EXECUTE'),'authenticated can request organization deletion');
-SELECT ok(NOT has_function_privilege('PUBLIC','public.is_active_supplier_for(uuid,uuid)','EXECUTE'),'supplier implementation helper denies PUBLIC');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.is_active_supplier_for(uuid,uuid)'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'supplier implementation helper denies PUBLIC');
 SELECT ok(NOT has_function_privilege('anon','public.is_active_supplier_for(uuid,uuid)','EXECUTE'),'supplier implementation helper denies anon');
 SELECT ok(NOT has_function_privilege('authenticated','public.is_active_supplier_for(uuid,uuid)','EXECUTE'),'supplier implementation helper denies authenticated');
 

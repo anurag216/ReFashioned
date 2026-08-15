@@ -148,7 +148,7 @@ export type Database = {
       certifications: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           evidence_id: string
           expiry_date: string | null
           id: string
@@ -161,7 +161,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by: string
+          created_by?: string | null
           evidence_id: string
           expiry_date?: string | null
           id?: string
@@ -174,7 +174,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           evidence_id?: string
           expiry_date?: string | null
           id?: string
@@ -580,7 +580,7 @@ export type Database = {
       organization_member_invites: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           email: string
           expires_at: string
           id: string
@@ -595,7 +595,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by: string
+          created_by?: string | null
           email: string
           expires_at?: string
           id?: string
@@ -610,7 +610,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           email?: string
           expires_at?: string
           id?: string
@@ -697,18 +697,24 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          lifecycle_changed_at: string
+          lifecycle_status: Database["public"]["Enums"]["organization_lifecycle_status"]
           name: string
           plan: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
+          lifecycle_changed_at?: string
+          lifecycle_status?: Database["public"]["Enums"]["organization_lifecycle_status"]
           name: string
           plan?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
+          lifecycle_changed_at?: string
+          lifecycle_status?: Database["public"]["Enums"]["organization_lifecycle_status"]
           name?: string
           plan?: string | null
         }
@@ -780,6 +786,73 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      privacy_erasure_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          denial_reason: string | null
+          denied_at: string | null
+          id: string
+          organization_id: string | null
+          processing_started_at: string | null
+          request_type: string
+          requested_at: string
+          requester_profile_id: string | null
+          status: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          denial_reason?: string | null
+          denied_at?: string | null
+          id?: string
+          organization_id?: string | null
+          processing_started_at?: string | null
+          request_type?: string
+          requested_at?: string
+          requester_profile_id?: string | null
+          status?: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          denial_reason?: string | null
+          denied_at?: string | null
+          id?: string
+          organization_id?: string | null
+          processing_started_at?: string | null
+          request_type?: string
+          requested_at?: string
+          requester_profile_id?: string | null
+          status?: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "privacy_erasure_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "privacy_erasure_requests_requester_profile_id_fkey"
+            columns: ["requester_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "privacy_erasure_requests_subject_profile_id_fkey"
+            columns: ["subject_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1308,6 +1381,27 @@ export type Database = {
         Args: { p_token: string }
         Returns: undefined
       }
+      request_organization_deletion: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      request_personal_data_erasure: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          completed_at: string | null
+          created_at: string
+          denial_reason: string | null
+          denied_at: string | null
+          id: string
+          organization_id: string | null
+          processing_started_at: string | null
+          request_type: string
+          requested_at: string
+          requester_profile_id: string | null
+          status: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id: string | null
+        }
+      }
       review_evidence_upload: {
         Args: {
           p_decision: string
@@ -1340,6 +1434,18 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: string
       }
+      service_complete_personal_identity_erasure: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
+      service_prepare_personal_identity_erasure: {
+        Args: { p_profile_id: string }
+        Returns: string
+      }
+      service_purge_terminal_invitation_personal_data: {
+        Args: { p_cutoff: string }
+        Returns: number
+      }
       supplier_identity_lock: {
         Args: { p_email: string; p_supplier_id: string }
         Returns: undefined
@@ -1362,7 +1468,16 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      organization_lifecycle_status:
+        | "active"
+        | "deletion_requested"
+        | "suspended"
+        | "tombstoned"
+      privacy_erasure_status:
+        | "requested"
+        | "processing"
+        | "completed"
+        | "denied"
     }
     CompositeTypes: {
       [_ in never]: never
