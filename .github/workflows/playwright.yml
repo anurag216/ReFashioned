@@ -136,7 +136,7 @@ jobs:
           rm -f /tmp/supabase-status.env
 
       - name: Install deterministic local E2E fixtures
-        run: node scripts/e2e/setup-local-e2e.mjs
+        run: node artifacts/refashioned/scripts/e2e/setup-local-e2e.mjs
 
       - name: Build PR application
         run: pnpm --dir artifacts/refashioned build
