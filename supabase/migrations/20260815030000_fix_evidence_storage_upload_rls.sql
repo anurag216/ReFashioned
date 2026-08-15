@@ -1,6 +1,37 @@
 -- Storage API v1.26.4 checks INSERT permission before object metadata exists.
 -- Authorize that probe from the trusted upload intent; validate actual object
 -- metadata only when the upload is finalized.
+CREATE OR REPLACE FUNCTION private.current_actor_can_preflight_evidence_object(
+  p_bucket text,
+  p_path text
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $function$
+  SELECT auth.uid() IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.evidence_uploads AS evidence
+      WHERE evidence.storage_bucket = p_bucket
+        AND evidence.storage_path = p_path
+        AND evidence.status = 'upload_pending'
+        AND evidence.upload_expires_at > pg_catalog.now()
+        AND evidence.uploaded_by = auth.uid()
+        AND evidence.mime_type IN ('application/pdf', 'image/png', 'image/jpeg')
+        AND evidence.size_bytes BETWEEN 1 AND 10485760
+        AND public.current_actor_can_upload_evidence(evidence.lifecycle_stage_id)
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION private.current_actor_can_preflight_evidence_object(text,text)
+FROM PUBLIC, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.current_actor_can_preflight_evidence_object(text,text)
+TO authenticated;
+
 DROP POLICY IF EXISTS compliance_docs_insert ON storage.objects;
 CREATE POLICY compliance_docs_insert
 ON storage.objects
@@ -9,19 +40,13 @@ TO authenticated
 WITH CHECK (
   storage.objects.bucket_id = 'compliance_docs'
   AND storage.objects.owner_id = auth.uid()::text
-  AND EXISTS (
-    SELECT 1
-    FROM public.evidence_uploads AS evidence
-    WHERE evidence.storage_bucket = storage.objects.bucket_id
-      AND evidence.storage_path = storage.objects.name
-      AND evidence.status = 'upload_pending'
-      AND evidence.upload_expires_at > pg_catalog.now()
-      AND evidence.uploaded_by = auth.uid()
-      AND evidence.mime_type IN ('application/pdf', 'image/png', 'image/jpeg')
-      AND evidence.size_bytes BETWEEN 1 AND 10485760
-      AND public.current_actor_can_upload_evidence(evidence.lifecycle_stage_id)
+  AND private.current_actor_can_preflight_evidence_object(
+    storage.objects.bucket_id,
+    storage.objects.name
   )
 );
+
+DROP FUNCTION IF EXISTS private.current_actor_can_upload_evidence_object(text,text,text,bigint);
 
 CREATE OR REPLACE FUNCTION public.finalize_evidence_upload(p_evidence_id uuid)
 RETURNS void
@@ -70,3 +95,6 @@ BEGIN
   VALUES(v.organization_id,v_actor,'evidence_upload_finalized','evidence_upload',v.id::text);
 END
 $function$;
+
+REVOKE ALL ON FUNCTION public.finalize_evidence_upload(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.finalize_evidence_upload(uuid) TO authenticated;
