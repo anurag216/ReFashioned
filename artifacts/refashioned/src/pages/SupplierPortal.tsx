@@ -43,6 +43,7 @@ export function SupplierPortal() {
   const userId = useAuthUserId();
   const { data: membership } = useCurrentMembership(userId);
   const isAdmin = membership?.role === "admin";
+  const canEdit = isAdmin || membership?.role === "manager";
 
   const { data: suppliers = [], isLoading: loading, error: fetchErrorObj, refetch } = useSuppliers();
   const fetchError = fetchErrorObj instanceof Error ? fetchErrorObj.message : null;
@@ -193,12 +194,12 @@ export function SupplierPortal() {
           <p className="text-sm text-muted-foreground mt-1">Onboard suppliers, track data submissions, and manage certification uploads</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
+          {canEdit && <button
             onClick={() => { setShowAddModal(true); setSaveError(null); }}
             className="flex items-center gap-2 bg-[#6AE096] hover:bg-[#5acc85] text-[#0d2b1e] px-4 py-2 rounded-md text-sm font-semibold transition-colors shadow-sm"
           >
             <Plus className="w-4 h-4" /> Add Supplier
-          </button>
+          </button>}
           {isAdmin && <button
             data-testid="button-invite-supplier"
             onClick={() => setShowInviteModal(true)}
