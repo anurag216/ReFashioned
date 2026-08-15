@@ -23,8 +23,7 @@ export function SupplierWorkspace({ access, email, onSignOut }: { access: Suppli
 
   async function loadTasks() {
     if (!supabase || typeof supabase.rpc !== "function") return;
-    const rpc = supabase.rpc as unknown as (name: string, args?: Record<string, unknown>) => Promise<{ data: Task[] | null; error: { message: string } | null }>;
-    const result = await rpc("get_my_supplier_evidence_tasks");
+    const result = await supabase.rpc("get_my_supplier_evidence_tasks") as unknown as { data: Task[] | null; error: { message: string } | null };
     if (result.error) {
       if (!handleSupplierAuthorizationError(result.error.message)) setError(result.error.message);
     } else setTasks(result.data ?? []);
@@ -43,24 +42,22 @@ export function SupplierWorkspace({ access, email, onSignOut }: { access: Suppli
   async function upload(task: Task, file: File) {
     if (!supabase) return;
     setUploading(task.lifecycle_stage_id); setError(null);
-    const rpc = supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: Intent[] | null; error: { message: string } | null }>;
-    const intentResult = await rpc("create_evidence_upload_intent", { p_lifecycle_stage_id: task.lifecycle_stage_id, p_document_type: "certificate", p_original_filename: file.name, p_mime_type: file.type, p_size_bytes: file.size });
+    const intentResult = await supabase.rpc("create_evidence_upload_intent", { p_lifecycle_stage_id: task.lifecycle_stage_id, p_document_type: "certificate", p_original_filename: file.name, p_mime_type: file.type, p_size_bytes: file.size }) as unknown as { data: Intent[] | null; error: { message: string } | null };
     const intent = intentResult.data?.[0];
     if (intentResult.error || !intent) {
       if (!handleSupplierAuthorizationError(intentResult.error?.message)) { setError(intentResult.error?.message ?? "Upload authorization failed."); setUploading(null); }
       return;
     }
     const stored = await supabase.storage.from(intent.bucket_id).upload(intent.storage_path, file, { upsert: false, contentType: file.type });
-    if (stored.error) { await rpc("cancel_evidence_upload_intent",{p_evidence_id:intent.evidence_id}).catch(()=>undefined); setError(`Upload failed: ${stored.error.message}. You can retry.`); await loadTasks(); setUploading(null); return; }
-    const finalized = await rpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
+    if (stored.error) { await Promise.resolve(supabase.rpc("cancel_evidence_upload_intent",{p_evidence_id:intent.evidence_id})).catch(()=>undefined); setError(`Upload failed: ${stored.error.message}. You can retry.`); await loadTasks(); setUploading(null); return; }
+    const finalized = await supabase.rpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
     if (finalized.error) { if (!handleSupplierAuthorizationError(finalized.error.message)) { setError(finalized.error.message); setUploading(null); } return; }
     await loadTasks(); setUploading(null);
   }
   async function cancelIntent(evidenceId:string) {
     if(!supabase || uploading) return;
     setUploading(evidenceId); setError(null);
-    const rpc=supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<{error:{message:string}|null}>;
-    const result=await rpc("cancel_evidence_upload_intent",{p_evidence_id:evidenceId});
+    const result=await supabase.rpc("cancel_evidence_upload_intent",{p_evidence_id:evidenceId});
     if(result.error) setError(`Unable to cancel: ${result.error.message}`);
     await loadTasks(); setUploading(null);
   }

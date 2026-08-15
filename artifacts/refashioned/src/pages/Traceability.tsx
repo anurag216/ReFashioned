@@ -146,7 +146,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         `)
         .eq("product_id", selectedProduct)
         .order("stage_order", { ascending: true }),
-        (supabase.rpc as unknown as (name:string,args:Record<string,unknown>)=>Promise<{data:EvidenceRow[]|null;error:{message:string}|null}>)("get_my_organization_evidence",{p_product_id:selectedProduct})]);
+        supabase.rpc("get_my_organization_evidence",{p_product_id:selectedProduct}) as unknown as Promise<{data:EvidenceRow[]|null;error:{message:string}|null}>]);
 
       if (cancelled) return;
 
