@@ -25,7 +25,6 @@ CREATE TABLE public.privacy_erasure_requests (
     (status='processing' AND processing_started_at IS NOT NULL AND completed_at IS NULL AND denied_at IS NULL AND denial_reason IS NULL) OR
     (status='completed' AND processing_started_at IS NOT NULL AND completed_at IS NOT NULL AND denied_at IS NULL AND denial_reason IS NULL) OR
     (status='denied' AND completed_at IS NULL AND denied_at IS NOT NULL AND length(btrim(denial_reason)) BETWEEN 3 AND 500))
-  )
 );
 CREATE UNIQUE INDEX privacy_erasure_one_open_subject_idx ON public.privacy_erasure_requests(subject_profile_id)
   WHERE status IN ('requested','processing');
@@ -71,8 +70,8 @@ ALTER TABLE public.organization_member_invites DROP CONSTRAINT organization_memb
 ALTER TABLE public.organization_member_invites DROP CONSTRAINT organization_member_invites_revoked_check,
   ADD CONSTRAINT organization_member_invites_revoked_check CHECK ((revoked_at IS NULL AND revoke_reason IS NULL) OR (revoked_at IS NOT NULL AND length(revoke_reason) BETWEEN 3 AND 500));
 
-CREATE SCHEMA IF NOT EXISTS private;
-REVOKE ALL ON SCHEMA private FROM PUBLIC,anon,authenticated;
+-- The private schema predates this migration. Authenticated USAGE is required by
+-- the Storage API preflight helper and must not be revoked here.
 
 CREATE FUNCTION public.request_personal_data_erasure()
 RETURNS public.privacy_erasure_requests
@@ -82,7 +81,13 @@ BEGIN
   IF v_actor IS NULL OR NOT EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=v_actor) THEN
     RAISE EXCEPTION 'authenticated profile required' USING ERRCODE='42501';
   END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('privacy-erasure:'||v_actor::text,0));
   SELECT m.organization_id INTO v_org FROM public.organization_members m WHERE m.profile_id=v_actor;
+  IF v_org IS NULL THEN
+    SELECT a.organization_id INTO v_org FROM public.supplier_access_memberships a
+      JOIN public.organizations o ON o.id=a.organization_id
+      WHERE a.profile_id=v_actor AND a.revoked_at IS NULL AND o.lifecycle_status='active';
+  END IF;
   SELECT * INTO v_request FROM public.privacy_erasure_requests r
     WHERE r.subject_profile_id=v_actor AND r.status IN ('requested','processing') ORDER BY r.requested_at LIMIT 1;
   IF FOUND THEN RETURN v_request; END IF;
@@ -101,7 +106,7 @@ GRANT EXECUTE ON FUNCTION public.request_personal_data_erasure() TO authenticate
 -- the Supabase Admin API. The profile cascade then NULLs historical actor FKs.
 CREATE FUNCTION private.prepare_personal_identity_erasure(p_profile_id uuid)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
-DECLARE v_request uuid; v_email text;
+DECLARE v_request uuid; v_email text; v_access record;
 BEGIN
   SELECT r.id,p.email INTO v_request,v_email
   FROM public.privacy_erasure_requests r JOIN public.profiles p ON p.id=r.subject_profile_id
@@ -114,10 +119,20 @@ BEGIN
     WHERE email=lower(btrim(v_email)) AND redeemed_at IS NULL AND revoked_at IS NULL;
   UPDATE public.supplier_invites SET revoked_at=coalesce(revoked_at,now()),status='revoked'
     WHERE email=lower(btrim(v_email)) AND redeemed_at IS NULL AND revoked_at IS NULL;
+  -- Resolve and lock the authoritative access -> contact mapping before access
+  -- removal. supplier_contacts intentionally has no profile_id column.
+  FOR v_access IN
+    SELECT a.id,a.supplier_contact_id,a.supplier_id,a.organization_id
+    FROM public.supplier_access_memberships a
+    WHERE a.profile_id=p_profile_id FOR UPDATE
+  LOOP
+    PERFORM public.supplier_identity_lock(v_access.supplier_id,v_email);
+    PERFORM 1 FROM public.supplier_contacts c WHERE c.id=v_access.supplier_contact_id AND c.supplier_id=v_access.supplier_id FOR UPDATE;
+    DELETE FROM public.supplier_access_memberships a WHERE a.id=v_access.id;
+    UPDATE public.supplier_contacts c SET name='Erased contact',email='erased-'||c.id::text||'@invalid.example'
+      WHERE c.id=v_access.supplier_contact_id AND c.supplier_id=v_access.supplier_id;
+  END LOOP;
   DELETE FROM public.organization_members WHERE profile_id=p_profile_id;
-  DELETE FROM public.supplier_access_memberships WHERE profile_id=p_profile_id;
-  UPDATE public.supplier_contacts SET profile_id=NULL,name='Erased contact',email='erased-'||id::text||'@invalid.example'
-    WHERE profile_id=p_profile_id;
   UPDATE public.profiles SET email='erased-'||id::text||'@invalid.example',full_name=NULL WHERE id=p_profile_id;
   IF EXISTS(SELECT 1 FROM public.organization_members WHERE profile_id=p_profile_id)
      OR EXISTS(SELECT 1 FROM public.supplier_access_memberships WHERE profile_id=p_profile_id AND revoked_at IS NULL) THEN
@@ -151,6 +166,27 @@ REVOKE ALL ON FUNCTION private.prepare_personal_identity_erasure(uuid),private.c
 GRANT USAGE ON SCHEMA private TO service_role;
 GRANT EXECUTE ON FUNCTION private.prepare_personal_identity_erasure(uuid),private.complete_personal_identity_erasure(uuid),private.purge_terminal_invitation_personal_data(timestamptz) TO service_role;
 
+CREATE FUNCTION public.service_prepare_personal_identity_erasure(p_profile_id uuid)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  IF coalesce(auth.jwt()->>'role','')<>'service_role' THEN RAISE EXCEPTION 'service role required' USING ERRCODE='42501'; END IF;
+  RETURN private.prepare_personal_identity_erasure(p_profile_id);
+END $$;
+CREATE FUNCTION public.service_complete_personal_identity_erasure(p_request_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  IF coalesce(auth.jwt()->>'role','')<>'service_role' THEN RAISE EXCEPTION 'service role required' USING ERRCODE='42501'; END IF;
+  PERFORM private.complete_personal_identity_erasure(p_request_id);
+END $$;
+CREATE FUNCTION public.service_purge_terminal_invitation_personal_data(p_cutoff timestamptz)
+RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  IF coalesce(auth.jwt()->>'role','')<>'service_role' THEN RAISE EXCEPTION 'service role required' USING ERRCODE='42501'; END IF;
+  RETURN private.purge_terminal_invitation_personal_data(p_cutoff);
+END $$;
+REVOKE ALL ON FUNCTION public.service_prepare_personal_identity_erasure(uuid),public.service_complete_personal_identity_erasure(uuid),public.service_purge_terminal_invitation_personal_data(timestamptz) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.service_prepare_personal_identity_erasure(uuid),public.service_complete_personal_identity_erasure(uuid),public.service_purge_terminal_invitation_personal_data(timestamptz) TO service_role;
+
 -- Every authorization helper consults live tenant state, so stale JWTs fail closed.
 CREATE OR REPLACE FUNCTION public.is_org_member(target_organization_id uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -164,7 +200,8 @@ CREATE OR REPLACE FUNCTION public.is_active_supplier_for(p_profile_id uuid,p_sup
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT EXISTS(SELECT 1 FROM public.supplier_access_memberships a JOIN public.organizations o ON o.id=a.organization_id
    WHERE a.profile_id=p_profile_id AND a.supplier_id=p_supplier_id AND a.revoked_at IS NULL AND o.lifecycle_status='active') $$;
-GRANT EXECUTE ON FUNCTION public.is_org_member(uuid),public.has_org_role(uuid,text[]),public.is_active_supplier_for(uuid,uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_org_member(uuid),public.has_org_role(uuid,text[]) TO authenticated;
+REVOKE ALL ON FUNCTION public.is_active_supplier_for(uuid,uuid) FROM PUBLIC,anon,authenticated;
 
 CREATE OR REPLACE FUNCTION public.protect_organization_membership()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -176,7 +213,7 @@ BEGIN
   IF TG_OP='DELETE' AND NOT FOUND THEN RETURN OLD; END IF;
   IF OLD.role='admin' AND (TG_OP='DELETE' OR NEW.role<>'admin')
      AND NOT EXISTS(SELECT 1 FROM public.organization_members m WHERE m.organization_id=OLD.organization_id AND m.role='admin' AND m.id<>OLD.id)
-     AND NOT EXISTS(SELECT 1 FROM public.privacy_erasure_requests r WHERE r.subject_profile_id=OLD.profile_id AND r.status='processing') THEN
+     AND EXISTS(SELECT 1 FROM public.organizations o WHERE o.id=OLD.organization_id AND o.lifecycle_status='active') THEN
     RAISE EXCEPTION 'cannot remove or demote the final organization admin';
   END IF;
   RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
@@ -189,6 +226,7 @@ CREATE FUNCTION public.enforce_active_organization_write()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_org uuid:=CASE WHEN TG_TABLE_NAME='organizations' THEN NEW.id ELSE NEW.organization_id END;
 BEGIN
+  IF TG_TABLE_NAME IN ('organization_member_invites','supplier_invites') AND to_jsonb(NEW)->>'revoked_at' IS NOT NULL THEN RETURN NEW; END IF;
   IF NOT EXISTS(SELECT 1 FROM public.organizations o WHERE o.id=v_org AND o.lifecycle_status='active') THEN
     RAISE EXCEPTION 'organization is not active' USING ERRCODE='42501';
   END IF;
@@ -198,6 +236,75 @@ REVOKE ALL ON FUNCTION public.enforce_active_organization_write() FROM PUBLIC,an
 CREATE TRIGGER privacy_active_org_member_invites BEFORE INSERT OR UPDATE ON public.organization_member_invites FOR EACH ROW EXECUTE FUNCTION public.enforce_active_organization_write();
 CREATE TRIGGER privacy_active_supplier_invites BEFORE INSERT OR UPDATE ON public.supplier_invites FOR EACH ROW EXECUTE FUNCTION public.enforce_active_organization_write();
 CREATE TRIGGER privacy_active_evidence BEFORE INSERT OR UPDATE ON public.evidence_uploads FOR EACH ROW EXECUTE FUNCTION public.enforce_active_organization_write();
+CREATE TRIGGER privacy_active_memberships BEFORE INSERT OR UPDATE ON public.organization_members FOR EACH ROW EXECUTE FUNCTION public.enforce_active_organization_write();
+
+CREATE FUNCTION public.deactivate_organization_access()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+  IF OLD.lifecycle_status='active' AND NEW.lifecycle_status<>'active' THEN
+    UPDATE public.digital_product_passports SET is_published=false WHERE organization_id=NEW.id;
+    DELETE FROM public.supplier_access_memberships WHERE organization_id=NEW.id;
+    UPDATE public.organization_member_invites SET revoked_at=coalesce(revoked_at,now()),revoked_by=auth.uid(),
+      revoke_reason=coalesce(revoke_reason,'Organization is not active') WHERE organization_id=NEW.id AND redeemed_at IS NULL AND revoked_at IS NULL;
+    UPDATE public.supplier_invites SET revoked_at=coalesce(revoked_at,now()),status='revoked'
+      WHERE organization_id=NEW.id AND redeemed_at IS NULL AND revoked_at IS NULL;
+    DELETE FROM public.organization_members WHERE organization_id=NEW.id;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.deactivate_organization_access() FROM PUBLIC,anon,authenticated;
+CREATE TRIGGER privacy_deactivate_organization AFTER UPDATE OF lifecycle_status ON public.organizations
+FOR EACH ROW EXECUTE FUNCTION public.deactivate_organization_access();
+
+CREATE OR REPLACE FUNCTION public.redeem_organization_member_invite(p_token text)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE v_actor uuid:=auth.uid(); v_email text:=lower(btrim(coalesce(auth.jwt()->>'email',''))); v record; v_member uuid;
+BEGIN
+  IF v_actor IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
+  IF p_token IS NULL OR p_token !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid invitation' USING ERRCODE='22023'; END IF;
+  SELECT i.* INTO v FROM public.organization_member_invites i
+    WHERE i.token_hash=pg_catalog.encode(extensions.digest(p_token,'sha256'),'hex') FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'invalid invitation' USING ERRCODE='22023'; END IF;
+  PERFORM 1 FROM public.organizations o WHERE o.id=v.organization_id AND o.lifecycle_status='active' FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'organization is not active' USING ERRCODE='42501'; END IF;
+  IF v.revoked_at IS NOT NULL OR v.redeemed_at IS NOT NULL OR v.expires_at<=now() THEN RAISE EXCEPTION 'invitation is no longer usable' USING ERRCODE='55000'; END IF;
+  IF v_email='' OR v_email IS DISTINCT FROM v.email THEN RAISE EXCEPTION 'authenticated email does not match invitation' USING ERRCODE='42501'; END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended('supplier-profile:'||v_actor::text,0));
+  IF EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=v_actor) THEN RAISE EXCEPTION 'account already has organization membership' USING ERRCODE='23505'; END IF;
+  IF EXISTS(SELECT 1 FROM public.supplier_access_memberships a WHERE a.profile_id=v_actor AND a.revoked_at IS NULL) THEN RAISE EXCEPTION 'supplier identities cannot redeem internal invitations' USING ERRCODE='23514'; END IF;
+  INSERT INTO public.profiles(id,email) VALUES(v_actor,v_email) ON CONFLICT(id) DO UPDATE SET email=excluded.email;
+  INSERT INTO public.organization_members(organization_id,profile_id,role) VALUES(v.organization_id,v_actor,v.role) RETURNING id INTO v_member;
+  UPDATE public.organization_member_invites SET redeemed_at=now(),redeemed_by=v_actor WHERE id=v.id AND redeemed_at IS NULL AND revoked_at IS NULL;
+  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'organization_member_invite_redeemed','organization_member_invite',v.id::text);
+  RETURN v_member;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.redeem_supplier_invite(p_token text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public,extensions AS $$
+DECLARE v_actor uuid:=auth.uid(); v_email text:=lower(btrim(auth.jwt()->>'email')); v record; v_contact record;
+BEGIN
+  IF v_actor IS NULL THEN RAISE EXCEPTION 'authentication required' USING ERRCODE='42501'; END IF;
+  IF p_token IS NULL OR p_token !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invitation is invalid' USING ERRCODE='22023'; END IF;
+  SELECT supplier_id,email INTO v FROM public.supplier_invites WHERE token_hash=encode(extensions.digest(p_token,'sha256'),'hex');
+  IF NOT FOUND THEN RAISE EXCEPTION 'invitation is invalid' USING ERRCODE='22023'; END IF;
+  PERFORM public.supplier_identity_lock(v.supplier_id,v.email);
+  SELECT * INTO v FROM public.supplier_invites WHERE token_hash=encode(extensions.digest(p_token,'sha256'),'hex') FOR UPDATE;
+  PERFORM 1 FROM public.organizations o WHERE o.id=v.organization_id AND o.lifecycle_status='active' FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'organization is not active' USING ERRCODE='42501'; END IF;
+  IF v.revoked_at IS NOT NULL OR v.redeemed_at IS NOT NULL OR v.expires_at<=now() THEN RAISE EXCEPTION 'invitation is no longer usable' USING ERRCODE='55000'; END IF;
+  IF v_email IS NULL OR v_email='' OR lower(btrim(v.email)) IS DISTINCT FROM v_email THEN RAISE EXCEPTION 'sign in with the invited email address' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=v_actor) OR EXISTS(SELECT 1 FROM public.organization_members WHERE profile_id=v_actor) THEN RAISE EXCEPTION 'separate supplier profile required' USING ERRCODE='42501'; END IF;
+  IF EXISTS(SELECT 1 FROM public.supplier_access_memberships WHERE profile_id=v_actor AND revoked_at IS NULL) THEN RAISE EXCEPTION 'account already has active supplier access' USING ERRCODE='55000'; END IF;
+  SELECT * INTO v_contact FROM public.supplier_contacts WHERE supplier_id=v.supplier_id AND lower(btrim(email))=lower(btrim(v.email)) FOR UPDATE;
+  IF NOT FOUND THEN
+    INSERT INTO public.supplier_contacts(supplier_id,name,email) VALUES(v.supplier_id,split_part(v.email,'@',1),lower(btrim(v.email))) RETURNING * INTO v_contact;
+  ELSIF EXISTS(SELECT 1 FROM public.supplier_access_memberships WHERE supplier_contact_id=v_contact.id AND revoked_at IS NULL) THEN RAISE EXCEPTION 'supplier contact already has active portal access' USING ERRCODE='55000';
+  END IF;
+  UPDATE public.supplier_invites SET redeemed_at=now(),redeemed_by=v_actor,status='redeemed' WHERE id=v.id;
+  INSERT INTO public.supplier_access_memberships(organization_id,supplier_id,supplier_contact_id,profile_id,invitation_id) VALUES(v.organization_id,v.supplier_id,v_contact.id,v_actor,v.id);
+  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'supplier_invite_redeemed','supplier_invite',v.id::text);
+END $$;
+GRANT EXECUTE ON FUNCTION public.redeem_organization_member_invite(text),public.redeem_supplier_invite(text) TO authenticated;
 
 CREATE FUNCTION public.request_organization_deletion()
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
@@ -207,8 +314,6 @@ BEGIN
  WHERE m.profile_id=v_actor AND m.role='admin' AND o.lifecycle_status='active' FOR UPDATE OF o;
  IF v_org IS NULL THEN RAISE EXCEPTION 'active organization administrator required' USING ERRCODE='42501'; END IF;
  UPDATE public.organizations SET lifecycle_status='deletion_requested',lifecycle_changed_at=now() WHERE id=v_org;
- UPDATE public.digital_product_passports SET is_published=false WHERE organization_id=v_org;
- UPDATE public.supplier_access_memberships SET revoked_at=coalesce(revoked_at,now()),revoked_by=v_actor,revocation_reason=coalesce(revocation_reason,'Organization deletion requested') WHERE organization_id=v_org AND revoked_at IS NULL;
  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v_org,v_actor,'organization_deletion_requested','organization',v_org::text);
 END $$;
 GRANT EXECUTE ON FUNCTION public.request_organization_deletion() TO authenticated;
