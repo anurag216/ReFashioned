@@ -6,6 +6,7 @@ import {
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { SecureDocumentLink } from "../components/ui/SecureDocumentLink";
+import { uploadEvidenceDocument, type EvidenceUploadClient } from "../lib/evidenceUpload";
 
 // Stage name → icon/colour — purely presentational, lives client-side
 const STAGE_ICON_MAP: Record<string, { icon: ElementType; iconBg: string; iconColor: string }> = {
@@ -238,28 +239,10 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     setRefreshKey(k => k + 1);
     }
     if (certificateFile) {
-      setSavingLabel("Authorizing upload…");
-      type Intent = { evidence_id: string; bucket_id: string; storage_path: string; upload_expires_at: string };
-      const intentResult = await client.rpc("create_evidence_upload_intent", {
-        p_lifecycle_stage_id: stageId,
-        p_document_type: "certificate",
-        p_original_filename: certificateFile.name,
-        p_mime_type: certificateFile.type,
-        p_size_bytes: certificateFile.size,
+      const result = await uploadEvidenceDocument(client as EvidenceUploadClient, stageId, certificateFile, step => {
+        setSavingLabel(step === "authorizing" ? "Authorizing upload…" : step === "uploading" ? "Uploading evidence…" : "Finalizing evidence…");
       });
-      const { data: intents, error: intentError } = intentResult as { data: Intent[] | null; error: { message: string } | null };
-      const intent = intents?.[0];
-      if (intentError || !intent) { setSaveError(`Stage saved. Evidence upload authorization failed: ${intentError?.message ?? "try again"}`); setSaving(false); return; }
-      setSavingLabel("Uploading evidence…");
-      const { error: uploadError } = await client.storage.from(intent.bucket_id)
-        .upload(intent.storage_path, certificateFile, { upsert: false, contentType: certificateFile.type });
-      if (uploadError) {
-        await Promise.resolve(client.rpc("cancel_evidence_upload_intent", { p_evidence_id: intent.evidence_id })).catch(() => undefined);
-        setSaveError(`Stage saved. Evidence upload failed: ${uploadError.message}. Retry to reuse this stage.`); setSaving(false); return;
-      }
-      setSavingLabel("Finalizing evidence…");
-      const { error: finalizeError } = await client.rpc("finalize_evidence_upload", { p_evidence_id: intent.evidence_id });
-      if (finalizeError) { setSaveError(`Stage saved. Evidence finalization failed: ${finalizeError.message}. Retry finalization before starting another upload.`); setSaving(false); return; }
+      if (result.error) { setSaveError(`Stage saved. ${result.error}`); setSaving(false); return; }
     }
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
