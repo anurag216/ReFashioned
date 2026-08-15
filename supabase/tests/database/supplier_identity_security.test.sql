@@ -85,7 +85,16 @@ SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000002'
 SELECT set_config('request.jwt.claims',jsonb_build_object('sub','b0000000-0000-0000-0000-000000000002','role','authenticated')::text,true);
 SET LOCAL ROLE authenticated;
 SELECT lives_ok($$SELECT public.create_supplier_contact('b2000000-0000-0000-0000-000000000001','Bob','bob@example.test')$$,'manager creates a contact');
-SELECT throws_ok($$SELECT public.delete_supplier_contact((SELECT id FROM public.supplier_contacts WHERE email='bob@example.test'))$$,'42501',NULL,'manager cannot delete contacts');
+RESET ROLE;
+CREATE TEMP TABLE identity_contact_ids AS
+SELECT
+  (SELECT id FROM public.supplier_contacts WHERE email='alice@example.test') AS alice_id,
+  (SELECT id FROM public.supplier_contacts WHERE email='bob@example.test') AS bob_id;
+GRANT SELECT ON identity_contact_ids TO authenticated;
+SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000002',true);
+SELECT set_config('request.jwt.claims',jsonb_build_object('sub','b0000000-0000-0000-0000-000000000002','role','authenticated')::text,true);
+SET LOCAL ROLE authenticated;
+SELECT throws_ok($$SELECT public.delete_supplier_contact((SELECT bob_id FROM identity_contact_ids))$$,'42501',NULL,'manager cannot delete contacts');
 RESET ROLE;
 
 SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000003',true);
@@ -108,10 +117,10 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000001',true);
 SELECT set_config('request.jwt.claims',jsonb_build_object('sub','b0000000-0000-0000-0000-000000000001','role','authenticated')::text,true);
 SET LOCAL ROLE authenticated;
-SELECT lives_ok($$SELECT public.delete_supplier_contact((SELECT id FROM public.supplier_contacts WHERE email='bob@example.test'))$$,'admin deletes a safe contact');
+SELECT lives_ok($$SELECT public.delete_supplier_contact((SELECT bob_id FROM identity_contact_ids))$$,'admin deletes a safe contact');
 SELECT lives_ok($$SELECT * FROM public.create_supplier_invite('b2000000-0000-0000-0000-000000000001','alice@example.test')$$,'admin creates a pending invite');
-SELECT throws_ok($$SELECT public.update_supplier_contact((SELECT id FROM public.supplier_contacts WHERE email='alice@example.test'),'Alice','new@example.test')$$,'55000',NULL,'pending invitation prevents email change');
-SELECT throws_ok($$SELECT public.delete_supplier_contact((SELECT id FROM public.supplier_contacts WHERE email='alice@example.test'))$$,'55000',NULL,'pending invitation prevents contact deletion');
+SELECT throws_ok($$SELECT public.update_supplier_contact((SELECT alice_id FROM identity_contact_ids),'Alice','new@example.test')$$,'55000',NULL,'pending invitation prevents email change');
+SELECT throws_ok($$SELECT public.delete_supplier_contact((SELECT alice_id FROM identity_contact_ids))$$,'55000',NULL,'pending invitation prevents contact deletion');
 RESET ROLE;
 
 SELECT throws_ok($$UPDATE public.supplier_contacts SET supplier_id='b2000000-0000-0000-0000-000000000002' WHERE email='alice@example.test'$$,'P0001','supplier contact supplier is immutable','supplier contact cannot move suppliers');

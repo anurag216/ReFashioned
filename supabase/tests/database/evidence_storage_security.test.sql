@@ -78,9 +78,12 @@ SELECT is((SELECT bucket_id FROM admin_intent),'compliance_docs','bucket is serv
 SELECT throws_ok($$INSERT INTO storage.objects(bucket_id,name,owner,metadata) VALUES('compliance_docs','arbitrary.pdf','a0000000-0000-0000-0000-000000000001','{"mimetype":"application/pdf","size":100}')$$,'42501',NULL,'arbitrary Storage path denied');
 SELECT lives_ok(format($$INSERT INTO storage.objects(bucket_id,name,owner,metadata) VALUES('compliance_docs',%L,'a0000000-0000-0000-0000-000000000001','{"mimetype":"application/pdf","size":100}')$$,(SELECT storage_path FROM admin_intent)),'exact authorized Storage INSERT succeeds');
 SELECT lives_ok(format('SELECT public.finalize_evidence_upload(%L)',(SELECT evidence_id FROM admin_intent)),'valid object finalizes');
+RESET ROLE;
 SELECT is((SELECT status FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM admin_intent)),'pending_review','finalization enters pending review');
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format('SELECT public.finalize_evidence_upload(%L)',(SELECT evidence_id FROM admin_intent)),'P0001','upload intent is not pending','duplicate finalization fails');
-SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_upload_finalized' AND entity_name=(SELECT evidence_id::text FROM admin_intent)),1::bigint,'finalization audited once'); RESET ROLE;
+RESET ROLE;
+SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_upload_finalized' AND entity_name=(SELECT evidence_id::text FROM admin_intent)),1::bigint,'finalization audited once');
 
 -- Read isolation, review, certification, and cancellation.
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000003',true); SET LOCAL ROLE authenticated;
@@ -90,19 +93,24 @@ SELECT is((SELECT count(*) FROM storage.objects WHERE name=(SELECT storage_path 
 SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),0::bigint,'cross-tenant download target hidden'); RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
 SELECT lives_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NULL)$$,(SELECT evidence_id FROM admin_intent)),'manager approves pending evidence');
+RESET ROLE;
 SELECT ok((SELECT reviewed_by='a0000000-0000-0000-0000-000000000002' AND reviewed_at IS NOT NULL FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM admin_intent)),'approval records reviewer and time');
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
 CREATE TEMP TABLE certification AS SELECT public.create_certification_from_evidence((SELECT evidence_id FROM admin_intent),' Organic Standard ',current_date+30) id;
+RESET ROLE;
 SELECT ok((SELECT c.organization_id='a1000000-0000-0000-0000-000000000001' AND c.supplier_id='a3000000-0000-0000-0000-000000000001' AND c.verification_status='verified' FROM public.certifications c WHERE c.id=(SELECT id FROM certification)),'certification scope and verified state derived');
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format($$SELECT public.create_certification_from_evidence(%L,'Duplicate',current_date+30)$$,(SELECT evidence_id FROM admin_intent)),'23505',NULL,'duplicate active certification rejected');
 SELECT lives_ok(format('SELECT public.revoke_certification(%L)',(SELECT id FROM certification)),'manager revokes certification');
-SELECT ok((SELECT verification_status='revoked' AND revoked_by='a0000000-0000-0000-0000-000000000002' AND revoked_at IS NOT NULL FROM public.certifications WHERE id=(SELECT id FROM certification)),'revocation records actor and time'); RESET ROLE;
+RESET ROLE;
+SELECT ok((SELECT verification_status='revoked' AND revoked_by='a0000000-0000-0000-0000-000000000002' AND revoked_at IS NOT NULL FROM public.certifications WHERE id=(SELECT id FROM certification)),'revocation records actor and time');
 
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 CREATE TEMP TABLE supplier_intent AS SELECT * FROM public.create_evidence_upload_intent('a4000000-0000-0000-0000-000000000001','test_report','supplier.pdf','application/pdf',90);
 SELECT pass('linked supplier creates own-stage intent');
 SELECT lives_ok(format('SELECT public.cancel_evidence_upload_intent(%L)',(SELECT evidence_id FROM supplier_intent)),'uploader cancels pending intent');
-SELECT is((SELECT count(*) FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM supplier_intent)),0::bigint,'cancel removes only intent record');
 RESET ROLE;
+SELECT is((SELECT count(*) FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM supplier_intent)),0::bigint,'cancel removes only intent record');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_upload_intent_cancelled' AND entity_name=(SELECT evidence_id::text FROM supplier_intent)),1::bigint,'cancellation audited once');
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NULL)$$,(SELECT evidence_id FROM admin_intent)),'42501',NULL,'supplier cannot review evidence'); RESET ROLE;
