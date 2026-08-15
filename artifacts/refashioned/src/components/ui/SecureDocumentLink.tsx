@@ -19,11 +19,10 @@ export function SecureDocumentLink({ evidenceId, label = "View document" }: { ev
     setOpening(true);
     setError(null);
     // The generated schema is refreshed from a clean database in CI.
-    const { data, error: authorizationError } = await (supabase.rpc as unknown as (
-      name: string, args: Record<string, string>
-    ) => Promise<{ data: DownloadTarget[] | null; error: { message: string } | null }>)("get_evidence_download_target", {
+    const rpcResult = await supabase.rpc("get_evidence_download_target", {
       p_evidence_id: evidenceId,
     });
+    const { data, error: authorizationError } = rpcResult as unknown as { data: DownloadTarget[] | null; error: { message: string } | null };
     const target = (data?.[0] ?? null) as DownloadTarget | null;
     if (authorizationError || !target) {
       setError("Document access was not authorized.");

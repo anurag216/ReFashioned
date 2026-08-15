@@ -11,10 +11,6 @@ async function signIn(page: Page, email: string, password: string) {
   await page.getByRole("button", { name: /sign in/i }).click();
 }
 
-async function closeContext(context: BrowserContext | undefined) {
-  if (context) await context.close();
-}
-
 test.describe("supplier lifecycle", () => {
 test.describe.configure({ retries: 0 });
 
@@ -69,9 +65,12 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     await supplierPage.getByLabel("Password").fill(password);
     await supplierPage.getByRole("button", { name: "Sign in" }).click();
     await expect(supplierPage.getByText(`Signed in as ${supplierEmail}`)).toBeVisible();
-    const tasksResponsePromise = supplierPage.waitForResponse(response =>
-      response.url().includes("/rpc/get_my_supplier_evidence_tasks"),
-    );
+    const tasksResponsePromise = Promise.race([
+      supplierPage.waitForResponse(response =>
+        response.url().includes("/rpc/get_my_supplier_evidence_tasks"),
+      ),
+      supplierPage.waitForEvent("pageerror").then(error => { throw error; }),
+    ]);
     await supplierPage.getByRole("button", { name: "Accept supplier invitation" }).click();
     await supplierPage.waitForURL("**/supplier");
     const tasksResponse = await tasksResponsePromise;
@@ -145,9 +144,11 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     await expect(supplierPage.getByRole("button", { name: "View submission" })).toHaveCount(0);
     await expect(supplierPage.locator("body")).not.toContainText(/Tenant A Product|Tenant B Secret Product/);
   } finally {
-    await closeContext(replayContext);
-    await closeContext(supplierContext);
-    await closeContext(adminContext);
+    await Promise.allSettled([
+      replayContext?.close(),
+      supplierContext?.close(),
+      adminContext?.close(),
+    ]);
   }
 });
 });
