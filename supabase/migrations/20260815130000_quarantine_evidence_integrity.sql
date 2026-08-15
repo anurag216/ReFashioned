@@ -1,19 +1,30 @@
 -- Evidence remains untrusted until a privileged scanner binds its verdict to the
 -- immutable Storage object and a SHA-256 of the bytes it inspected.
--- Every row already present at this migration boundary is explicitly historical;
--- this records compatibility provenance without claiming it was scanned.
-UPDATE public.evidence_uploads SET legacy_migrated=true;
-
 ALTER TABLE public.evidence_uploads
+  ADD COLUMN integrity_legacy_accepted boolean NOT NULL DEFAULT false,
   ADD COLUMN content_sha256 text,
   ADD COLUMN scan_status text NOT NULL DEFAULT 'pending',
   ADD COLUMN scan_started_at timestamptz,
   ADD COLUMN scan_completed_at timestamptz,
   ADD COLUMN scan_engine text,
-  ADD COLUMN scan_result text,
+  ADD COLUMN scan_result text;
+
+ALTER TABLE public.evidence_uploads
   DROP CONSTRAINT evidence_status_check,
   DROP CONSTRAINT evidence_review_check,
-  ADD CONSTRAINT evidence_status_check CHECK (status IN ('upload_pending','quarantined','pending_review','approved','rejected','superseded')),
+  ADD CONSTRAINT evidence_status_check CHECK (status IN ('upload_pending','quarantined','pending_review','approved','rejected','superseded'));
+
+-- Preserve reviewed historical evidence without inventing scan provenance. Rows
+-- still awaiting review enter quarantine, while outstanding upload intents keep
+-- their normal finalization lifecycle.
+UPDATE public.evidence_uploads
+SET integrity_legacy_accepted=true
+WHERE status IN ('approved','rejected','superseded');
+UPDATE public.evidence_uploads
+SET status='quarantined'
+WHERE status='pending_review';
+
+ALTER TABLE public.evidence_uploads
   ADD CONSTRAINT evidence_sha256_check CHECK (content_sha256 IS NULL OR content_sha256 ~ '^[0-9a-f]{64}$'),
   ADD CONSTRAINT evidence_scan_status_check CHECK (scan_status IN ('pending','clean','infected','error')),
   ADD CONSTRAINT evidence_review_check CHECK (
@@ -21,13 +32,22 @@ ALTER TABLE public.evidence_uploads
     OR (status IN ('upload_pending','quarantined','pending_review') AND reviewed_by IS NULL AND reviewed_at IS NULL)
     OR status='superseded'),
   ADD CONSTRAINT evidence_scan_state_check CHECK (
-    (legacy_migrated AND scan_status='pending' AND content_sha256 IS NULL AND scan_started_at IS NULL AND scan_completed_at IS NULL AND scan_engine IS NULL AND scan_result IS NULL)
-    OR (NOT legacy_migrated AND scan_status='pending' AND content_sha256 IS NULL AND scan_completed_at IS NULL AND scan_engine IS NULL AND scan_result IS NULL)
-    OR (NOT legacy_migrated AND scan_status IN ('clean','infected','error') AND content_sha256 IS NOT NULL AND scan_started_at IS NOT NULL AND scan_completed_at IS NOT NULL AND scan_engine IS NOT NULL AND scan_result IS NOT NULL)
+    (integrity_legacy_accepted AND status IN ('approved','rejected','superseded')
+      AND scan_status='pending' AND content_sha256 IS NULL AND scan_started_at IS NULL
+      AND scan_completed_at IS NULL AND scan_engine IS NULL AND scan_result IS NULL)
+    OR (NOT integrity_legacy_accepted AND status IN ('upload_pending','quarantined')
+      AND scan_status='pending' AND content_sha256 IS NULL AND scan_completed_at IS NULL
+      AND scan_engine IS NULL AND scan_result IS NULL)
+    OR (NOT integrity_legacy_accepted AND status='quarantined' AND scan_status IN ('infected','error')
+      AND content_sha256 IS NOT NULL AND scan_started_at IS NOT NULL AND scan_completed_at IS NOT NULL
+      AND scan_engine IS NOT NULL AND scan_result IS NOT NULL)
+    OR (NOT integrity_legacy_accepted AND status IN ('pending_review','approved','rejected','superseded')
+      AND scan_status='clean' AND content_sha256 IS NOT NULL AND scan_started_at IS NOT NULL
+      AND scan_completed_at IS NOT NULL AND scan_engine IS NOT NULL AND scan_result IS NOT NULL)
   );
 
-COMMENT ON COLUMN public.evidence_uploads.legacy_migrated IS
-  'True only for evidence predating quarantine. No scan or digest is fabricated; already-reviewed legacy records retain read/publication compatibility.';
+COMMENT ON COLUMN public.evidence_uploads.integrity_legacy_accepted IS
+  'True only for reviewed evidence predating mandatory integrity scanning; no scan or digest is implied.';
 COMMENT ON COLUMN public.evidence_uploads.content_sha256 IS
   'Lowercase SHA-256 of actual object bytes, supplied only by the trusted scanner boundary and immutable after a clean verdict.';
 
@@ -39,6 +59,8 @@ BEGIN
     NEW.storage_bucket,NEW.storage_path,NEW.uploaded_by) IS DISTINCT FROM
     (OLD.organization_id,OLD.supplier_id,OLD.lifecycle_stage_id,OLD.storage_bucket,OLD.storage_path,OLD.uploaded_by)
   THEN RAISE EXCEPTION 'evidence ownership and object identity are immutable'; END IF;
+  IF TG_OP='UPDATE' AND NEW.integrity_legacy_accepted IS DISTINCT FROM OLD.integrity_legacy_accepted
+  THEN RAISE EXCEPTION 'evidence integrity provenance is immutable'; END IF;
   IF TG_OP='UPDATE' AND OLD.scan_status='clean' AND
     (NEW.content_sha256,NEW.scan_status,NEW.scan_started_at,NEW.scan_completed_at,NEW.scan_engine,NEW.scan_result)
       IS DISTINCT FROM
@@ -63,7 +85,7 @@ BEGIN
  IF v.status<>'upload_pending' THEN RAISE EXCEPTION 'upload intent is not pending'; END IF;
  IF v.upload_expires_at<=now() THEN RAISE EXCEPTION 'upload intent expired'; END IF;
  IF NOT public.current_actor_can_upload_evidence(v.lifecycle_stage_id) THEN RAISE EXCEPTION 'authorization is no longer valid' USING ERRCODE='42501'; END IF;
- SELECT count(*),min(o.owner::text),min(o.metadata::text)::jsonb INTO v_count,v_owner,v_metadata FROM storage.objects o WHERE o.bucket_id=v.storage_bucket AND o.name=v.storage_path;
+ SELECT count(*),min(o.owner_id),min(o.metadata::text)::jsonb INTO v_count,v_owner,v_metadata FROM storage.objects o WHERE o.bucket_id=v.storage_bucket AND o.name=v.storage_path;
  IF v_count<>1 THEN RAISE EXCEPTION 'exactly one uploaded object is required'; END IF;
  IF v_owner IS DISTINCT FROM v_actor::text THEN RAISE EXCEPTION 'storage object owner mismatch'; END IF;
  IF v_metadata->>'mimetype' IS DISTINCT FROM v.mime_type OR NOT (v_metadata->>'size' ~ '^[0-9]+$') OR (v_metadata->>'size')::bigint IS DISTINCT FROM v.size_bytes OR v.size_bytes>10485760 THEN RAISE EXCEPTION 'storage object metadata mismatch'; END IF;
@@ -80,7 +102,7 @@ CREATE OR REPLACE FUNCTION public.record_evidence_scan_result(
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v public.evidence_uploads%ROWTYPE; v_metadata jsonb; v_count integer; v_action text;
 BEGIN
- IF coalesce(current_setting('request.jwt.claim.role',true),'') <> 'service_role'
+ IF coalesce(auth.jwt()->>'role','') <> 'service_role'
  THEN RAISE EXCEPTION 'trusted scanner required' USING ERRCODE='42501'; END IF;
  IF p_verdict NOT IN ('clean','infected','error') THEN RAISE EXCEPTION 'invalid scan verdict'; END IF;
  IF p_content_sha256 IS NULL OR p_content_sha256 !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION 'invalid authoritative SHA-256'; END IF;
@@ -89,7 +111,7 @@ BEGIN
  IF p_detected_mime NOT IN ('application/pdf','image/png','image/jpeg') OR p_detected_mime IS DISTINCT FROM p_declared_mime
  THEN RAISE EXCEPTION 'object content type is not compatible'; END IF;
  SELECT * INTO v FROM public.evidence_uploads WHERE id=p_evidence_id FOR UPDATE;
- IF NOT FOUND OR v.status<>'quarantined' OR v.scan_status<>'pending' OR v.legacy_migrated
+ IF NOT FOUND OR v.status<>'quarantined' OR v.scan_status<>'pending' OR v.integrity_legacy_accepted
  THEN RAISE EXCEPTION 'quarantined evidence is no longer scan-eligible'; END IF;
  IF (v.storage_bucket,v.storage_path,v.size_bytes,v.mime_type) IS DISTINCT FROM (p_storage_bucket,p_storage_path,p_size_bytes,p_declared_mime)
  THEN RAISE EXCEPTION 'scan result object identity mismatch'; END IF;
@@ -98,7 +120,7 @@ BEGIN
  IF v_count<>1 OR v_metadata->>'mimetype' IS DISTINCT FROM v.mime_type OR NOT (v_metadata->>'size' ~ '^[0-9]+$') OR (v_metadata->>'size')::bigint IS DISTINCT FROM v.size_bytes
  THEN RAISE EXCEPTION 'stored object identity changed during scan'; END IF;
  UPDATE public.evidence_uploads SET content_sha256=p_content_sha256,scan_status=p_verdict,
-   scan_completed_at=now(),scan_engine=btrim(p_scan_engine),scan_result=btrim(p_scan_result),
+   scan_started_at=coalesce(scan_started_at,now()),scan_completed_at=now(),scan_engine=btrim(p_scan_engine),scan_result=btrim(p_scan_result),
    status=CASE WHEN p_verdict='clean' THEN 'pending_review' ELSE 'quarantined' END
  WHERE id=v.id;
  v_action:=CASE p_verdict WHEN 'clean' THEN 'evidence_scan_clean' WHEN 'infected' THEN 'evidence_scan_rejected' ELSE 'evidence_scan_failed' END;
@@ -111,13 +133,14 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT auth.uid() IS NOT NULL AND EXISTS(SELECT 1 FROM public.evidence_uploads e
  WHERE e.storage_bucket=p_bucket AND e.storage_path=p_path
  AND ((e.scan_status='clean' AND e.content_sha256 IS NOT NULL AND e.status IN ('pending_review','approved','rejected','superseded'))
-      OR (e.legacy_migrated AND e.status IN ('approved','rejected','superseded')))
+      OR (e.integrity_legacy_accepted AND e.status IN ('approved','rejected','superseded')))
  AND (EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid() AND m.organization_id=e.organization_id)
-      OR EXISTS(SELECT 1 FROM public.supplier_contacts c WHERE c.profile_id=auth.uid() AND c.supplier_id=e.supplier_id)))
+      OR (NOT EXISTS(SELECT 1 FROM public.organization_members m WHERE m.profile_id=auth.uid())
+          AND EXISTS(SELECT 1 FROM public.supplier_access_memberships a WHERE a.profile_id=auth.uid() AND a.supplier_id=e.supplier_id AND a.revoked_at IS NULL))))
 $$;
 
 CREATE OR REPLACE FUNCTION public.get_evidence_download_target(p_evidence_id uuid)
-RETURNS TABLE(bucket_id text,storage_path text,download_name text,mime_type text)
+RETURNS TABLE(bucket_id text,storage_path text,original_filename text,mime_type text)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
  SELECT e.storage_bucket,e.storage_path,e.original_filename,e.mime_type FROM public.evidence_uploads e
  WHERE e.id=p_evidence_id AND public.current_actor_can_read_evidence_object(e.storage_bucket,e.storage_path)
@@ -182,15 +205,24 @@ $$;
 DROP FUNCTION public.get_my_supplier_evidence_tasks();
 CREATE FUNCTION public.get_my_supplier_evidence_tasks()
 RETURNS TABLE(lifecycle_stage_id uuid,stage_name text,product_name text,document_requirement text,evidence_status text,scan_status text,evidence_id uuid,rejection_reason text)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+ IF auth.uid() IS NULL OR NOT EXISTS(
+   SELECT 1 FROM public.supplier_access_memberships
+   WHERE profile_id=auth.uid() AND revoked_at IS NULL)
+ THEN RAISE EXCEPTION 'supplier portal access is not active' USING ERRCODE='42501'; END IF;
+ RETURN QUERY
  SELECT s.id,s.stage_name,p.name,'Evidence document'::text,e.status,e.scan_status,e.id,e.rejection_reason
- FROM public.supplier_contacts c
- JOIN public.suppliers su ON su.id=c.supplier_id
+ FROM public.supplier_access_memberships a
+ JOIN public.suppliers su ON su.id=a.supplier_id
  JOIN public.lifecycle_stages s ON (s.supplier_id,s.organization_id)=(su.id,su.organization_id)
  JOIN public.products p ON (p.id,p.organization_id)=(s.product_id,s.organization_id)
- LEFT JOIN LATERAL (SELECT x.id,x.status,x.scan_status,x.rejection_reason FROM public.evidence_uploads x WHERE x.lifecycle_stage_id=s.id ORDER BY x.created_at DESC LIMIT 1)e ON true
- WHERE c.profile_id=auth.uid() AND p.status<>'archived'
-$$;
+ LEFT JOIN LATERAL (
+   SELECT x.id,x.status,x.scan_status,x.rejection_reason
+   FROM public.evidence_uploads x WHERE x.lifecycle_stage_id=s.id
+   ORDER BY x.created_at DESC LIMIT 1)e ON true
+ WHERE a.profile_id=auth.uid() AND a.revoked_at IS NULL AND p.status<>'archived';
+END $$;
 
 REVOKE ALL ON FUNCTION public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text) TO service_role;

@@ -1,6 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
-SELECT no_plan();
+SELECT plan(80);
 
 INSERT INTO auth.users(id,instance_id,aud,role,email) VALUES
  ('a0000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','e-admin@test.invalid'),
@@ -50,6 +50,10 @@ SELECT ok(NOT has_table_privilege('authenticated','public.evidence_uploads','INS
 SELECT ok(NOT has_table_privilege('authenticated','public.evidence_uploads','UPDATE'),'direct evidence update revoked');
 SELECT ok(NOT has_table_privilege('authenticated','public.certifications','INSERT'),'direct certification insert revoked');
 SELECT ok(NOT has_table_privilege('authenticated','public.certifications','UPDATE'),'direct certification update revoked');
+SELECT ok(NOT has_function_privilege('authenticated','public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text)','EXECUTE'),'authenticated cannot execute scanner transition');
+SELECT ok(NOT has_function_privilege('anon','public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text)','EXECUTE'),'anon cannot execute scanner transition');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text)'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'PUBLIC cannot execute scanner transition');
+SELECT ok(has_function_privilege('service_role','public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text)','EXECUTE'),'service role can execute scanner transition');
 SELECT has_function('public','current_actor_can_upload_evidence',ARRAY['uuid'],'current-actor upload helper exists');
 SELECT has_function('public','current_actor_can_read_evidence_object',ARRAY['text','text'],'current-actor read helper exists');
 SELECT ok(NOT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('evidence_actor_authorized','can_read_evidence_object')),'no arbitrary-actor helper');
@@ -104,13 +108,14 @@ SELECT is((SELECT status FROM public.evidence_uploads WHERE id=(SELECT evidence_
 SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),0::bigint,'quarantined evidence has no download target');
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NULL)$$,(SELECT evidence_id FROM admin_intent)),'P0001','clean fingerprinted evidence pending review required','manager cannot approve quarantined evidence');
-SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf',repeat('a',64),'clean','test','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'42501','trusted scanner required','authenticated admin cannot attest clean');
+SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf',repeat('a',64),'clean','test','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'42501',NULL,'authenticated admin is denied scanner execution at the privilege boundary');
 RESET ROLE;
-SELECT set_config('request.jwt.claim.role','service_role',true);
+GRANT SELECT ON admin_intent TO service_role;
+SELECT set_config('request.jwt.claims','{"role":"service_role"}',true); SET LOCAL ROLE service_role;
 SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs','evidence/wrong.pdf',100,'application/pdf','application/pdf',repeat('a',64),'clean','test','clean')$$,(SELECT evidence_id FROM admin_intent)),'P0001','scan result object identity mismatch','scan result is bound to exact object identity');
 SELECT throws_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf','BAD','clean','test','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'P0001','invalid authoritative SHA-256','invalid authoritative digest rejected');
 SELECT lives_ok(format($$SELECT public.record_evidence_scan_result(%L,'compliance_docs',%L,100,'application/pdf','application/pdf',repeat('a',64),'clean','deterministic-ci','clean')$$,(SELECT evidence_id FROM admin_intent),(SELECT storage_path FROM admin_intent)),'trusted scanner accepts valid object-bound result');
-SELECT set_config('request.jwt.claim.role','',true);
+RESET ROLE; SELECT set_config('request.jwt.claims','{}',true);
 SELECT ok((SELECT status='pending_review' AND scan_status='clean' AND content_sha256=repeat('a',64) FROM public.evidence_uploads WHERE id=(SELECT evidence_id FROM admin_intent)),'clean fingerprinted evidence enters pending review');
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format('SELECT public.finalize_evidence_upload(%L)',(SELECT evidence_id FROM admin_intent)),'P0001','upload intent is not pending','duplicate finalization fails');
@@ -193,5 +198,14 @@ SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='evidence_upload_
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NULL)$$,(SELECT evidence_id FROM admin_intent)),'42501',NULL,'supplier cannot review evidence'); RESET ROLE;
 
+
+-- Active supplier authorization is re-evaluated immediately for the same JWT.
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
+SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),1::bigint,'active supplier can download clean authorized evidence'); RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
+SELECT lives_ok(format($$SELECT public.revoke_supplier_access(%L,'evidence authorization regression')$$,(SELECT id FROM public.supplier_access_memberships WHERE profile_id='a0000000-0000-0000-0000-000000000005')),'admin revokes supplier access'); RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
+SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),0::bigint,'same supplier JWT loses evidence download immediately after revocation');
+SELECT throws_ok($$SELECT * FROM public.get_my_supplier_evidence_tasks()$$,'42501','supplier portal access is not active','same supplier JWT loses task access immediately after revocation'); RESET ROLE;
 SELECT * FROM finish();
 ROLLBACK;

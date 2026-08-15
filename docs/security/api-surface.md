@@ -49,12 +49,13 @@ digest then permanently binds the reviewed evidence record to the bytes that
 were scanned. Production deployments must configure `EVIDENCE_SCANNER_TOKEN`
 and a trusted scanner adapter; there is no production clean-scan fallback.
 
-Rows marked `legacy_migrated` predate this pipeline. They deliberately retain
-an empty digest and `pending` scan status rather than inventing provenance.
-Already-reviewed legacy records and their existing certifications retain the
-historical read/publication behavior, but legacy evidence cannot be newly
-reviewed or used to create a new certification. Replacing it creates a normal
-new upload that must pass quarantine.
+Rows marked `integrity_legacy_accepted` had already reached a reviewed state
+before mandatory scanning. They deliberately retain an empty digest and
+`pending` scan status rather than inventing provenance. Existing certifications
+retain historical read/publication behavior, but pending-review evidence is
+moved into quarantine and historical evidence cannot create a new
+certification. Replacing it creates a normal new upload that must pass
+quarantine.
 - Storage policy helpers: `current_actor_can_upload_evidence`,
   `current_actor_can_read_evidence_object`
 

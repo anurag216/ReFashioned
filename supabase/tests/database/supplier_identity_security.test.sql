@@ -233,7 +233,9 @@ SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-0
 SELECT is(public.current_actor_is_active_supplier_for('b2000000-0000-0000-0000-000000000002'),false,'current actor helper rejects another supplier');
 CREATE TEMP TABLE identity_intent AS SELECT * FROM public.create_evidence_upload_intent('b5000000-0000-0000-0000-000000000001','certificate','identity.pdf','application/pdf',80);
 SELECT pass('active supplier creates an evidence intent'); RESET ROLE;
-UPDATE public.evidence_uploads SET status='pending_review',uploaded_at=now(),upload_expires_at=NULL WHERE id=(SELECT evidence_id FROM identity_intent);
+UPDATE public.evidence_uploads SET status='pending_review',uploaded_at=now(),upload_expires_at=NULL,
+ content_sha256=repeat('b',64),scan_status='clean',scan_started_at=now(),scan_completed_at=now(),scan_engine='identity-test',scan_result='clean'
+WHERE id=(SELECT evidence_id FROM identity_intent);
 INSERT INTO storage.objects(bucket_id,name,owner,metadata) SELECT bucket_id,storage_path,'b0000000-0000-0000-0000-000000000004','{"mimetype":"application/pdf","size":80}'::jsonb FROM identity_intent;
 SELECT set_config('request.jwt.claim.sub','b0000000-0000-0000-0000-000000000004',true);
 SELECT set_config('request.jwt.claims',jsonb_build_object('sub','b0000000-0000-0000-0000-000000000004','role','authenticated')::text,true);

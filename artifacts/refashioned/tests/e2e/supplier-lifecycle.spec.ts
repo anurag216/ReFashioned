@@ -121,7 +121,13 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     const { data: evidence, error: evidenceError } = await scanner.from("evidence_uploads")
       .select("id,storage_bucket,storage_path,size_bytes,mime_type").eq("lifecycle_stage_id", "e2e50000-0000-4000-8000-000000000001").single();
     if (evidenceError || !evidence) throw new Error(`Scanner fixture could not resolve evidence: ${evidenceError?.message}`);
-    const bytes = Buffer.from("%PDF-1.4\n% deterministic E2E supplier evidence\n%%EOF\n");
+    const { data: storedObject, error: downloadError } = await scanner.storage
+      .from(evidence.storage_bucket).download(evidence.storage_path);
+    if (downloadError || !storedObject) throw new Error(`Scanner fixture could not download stored evidence: ${downloadError?.message}`);
+    const bytes = Buffer.from(await storedObject.arrayBuffer());
+    if (bytes.byteLength !== evidence.size_bytes || bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      throw new Error("Scanner fixture rejected stored evidence identity");
+    }
     const { error: scanError } = await scanner.rpc("record_evidence_scan_result", {
       p_evidence_id: evidence.id, p_storage_bucket: evidence.storage_bucket, p_storage_path: evidence.storage_path,
       p_size_bytes: evidence.size_bytes, p_declared_mime: evidence.mime_type, p_detected_mime: "application/pdf",
