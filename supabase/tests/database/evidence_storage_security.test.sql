@@ -202,8 +202,9 @@ SELECT throws_ok(format($$SELECT public.review_evidence_upload(%L,'approved',NUL
 -- Active supplier authorization is re-evaluated immediately for the same JWT.
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),1::bigint,'active supplier can download clean authorized evidence'); RESET ROLE;
+SELECT set_config('test.supplier_access_id',(SELECT id::text FROM public.supplier_access_memberships WHERE profile_id='a0000000-0000-0000-0000-000000000005'),true);
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
-SELECT lives_ok(format($$SELECT public.revoke_supplier_access(%L,'evidence authorization regression')$$,(SELECT id FROM public.supplier_access_memberships WHERE profile_id='a0000000-0000-0000-0000-000000000005')),'admin revokes supplier access'); RESET ROLE;
+SELECT lives_ok(format($$SELECT public.revoke_supplier_access(%L,'evidence authorization regression')$$,current_setting('test.supplier_access_id')::uuid),'admin revokes supplier access'); RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','a0000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 SELECT is((SELECT count(*) FROM public.get_evidence_download_target((SELECT evidence_id FROM admin_intent))),0::bigint,'same supplier JWT loses evidence download immediately after revocation');
 SELECT throws_ok($$SELECT * FROM public.get_my_supplier_evidence_tasks()$$,'42501','supplier portal access is not active','same supplier JWT loses task access immediately after revocation'); RESET ROLE;
