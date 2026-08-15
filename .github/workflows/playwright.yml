@@ -87,6 +87,7 @@ jobs:
       PLAYWRIGHT_E2E_PASSWORD: Local-E2E-Only-Password-12!
       PLAYWRIGHT_ADMIN_EMAIL: admin@e2e.local
       PLAYWRIGHT_ADMIN_PASSWORD: Local-E2E-Only-Password-12!
+      PLAYWRIGHT_SUPPLIER_EMAIL: supplier-user@e2e.local
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
     steps:
       - name: Checkout
