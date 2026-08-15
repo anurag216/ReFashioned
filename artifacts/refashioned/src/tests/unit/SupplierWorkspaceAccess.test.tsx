@@ -26,7 +26,7 @@ describe("Supplier Workspace", () => {
     render(<SupplierWorkspace {...props} />);
     expect(await screen.findByText(/Tenant A Product — E2E Material Production/)).toBeInTheDocument();
     expect(screen.getByText("Evidence document")).toBeInTheDocument();
-    expect(screen.getByText("Status: not submitted")).toBeInTheDocument();
+    expect(screen.getByText("Status: Not submitted")).toBeInTheDocument();
     expect(mocks.rpcImplementation).toHaveBeenCalledWith("get_my_supplier_evidence_tasks", undefined);
     expect(screen.getByText("Supplier access active")).toBeInTheDocument();
   });
@@ -37,7 +37,7 @@ describe("Supplier Workspace", () => {
     mocks.rpcImplementation.mockImplementation((name: string) => {
       if (name === "get_my_supplier_evidence_tasks") {
         taskLoads += 1;
-        return Promise.resolve({ data: [taskLoads === 1 ? task : { ...task, evidence_status: "pending_review", evidence_id: "evidence-1" }], error: null });
+        return Promise.resolve({ data: [taskLoads === 1 ? task : { ...task, evidence_status: "quarantined", scan_status: "pending", evidence_id: "evidence-1" }], error: null });
       }
       if (name === "create_evidence_upload_intent") return Promise.resolve({
         data: [{ evidence_id: "evidence-1", bucket_id: "compliance_docs", storage_path: "private/evidence-1", upload_expires_at: "2030-01-01" }],
@@ -52,7 +52,7 @@ describe("Supplier Workspace", () => {
     const file = new File(["pdf"], "proof.pdf", { type: "application/pdf" });
     fireEvent.change(container.querySelector('input[type="file"]')!, { target: { files: [file] } });
 
-    await screen.findByText("Status: pending review");
+    await screen.findByText("Status: Security scan pending");
     expect(mocks.rpcImplementation).toHaveBeenCalledWith("create_evidence_upload_intent", {
       p_lifecycle_stage_id: "stage-secret",
       p_document_type: "certificate",

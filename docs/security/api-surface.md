@@ -39,6 +39,23 @@ Anonymous clients have no direct table access. They may call only:
   `review_evidence_upload`, `get_my_supplier_evidence_tasks`,
   `get_my_organization_evidence`
 - Certification: `create_certification_from_evidence`, `revoke_certification`
+
+Evidence files are untrusted input. Storage upload success does not equal
+trusted evidence: every new object moves into `quarantined`, where it cannot be
+read, reviewed, approved, or used for a certification. Only the trusted,
+service-role scanning boundary may download the actual bytes, classify their
+magic bytes, compute their SHA-256, and attest a normalized clean result. The
+digest then permanently binds the reviewed evidence record to the bytes that
+were scanned. Production deployments must configure `EVIDENCE_SCANNER_TOKEN`
+and a trusted scanner adapter; there is no production clean-scan fallback.
+
+Rows marked `integrity_legacy_accepted` had already reached a reviewed state
+before mandatory scanning. They deliberately retain an empty digest and
+`pending` scan status rather than inventing provenance. Existing certifications
+retain historical read/publication behavior, but pending-review evidence is
+moved into quarantine and historical evidence cannot create a new
+certification. Replacing it creates a normal new upload that must pass
+quarantine.
 - Storage policy helpers: `current_actor_can_upload_evidence`,
   `current_actor_can_read_evidence_object`
 

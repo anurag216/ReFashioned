@@ -34,7 +34,7 @@ test.describe("DPP certification trust chain", () => {
       await adminPage.getByTestId("select-product").selectOption({ label: `${PRODUCT_NAME} — DPP-TRUST` });
       const stage = adminPage.getByRole("row").filter({ hasText: STAGE_NAME });
       await expect(stage).toContainText(EVIDENCE_NAME);
-      await expect(stage).toContainText("pending review");
+      await expect(stage).toContainText("Ready for review");
       await stage.getByRole("button", { name: "Approve" }).click();
       await expect(stage).toContainText("approved");
 
@@ -64,6 +64,7 @@ test.describe("DPP certification trust chain", () => {
       await expect(guestPage.getByText(`Valid until ${VALID_UNTIL}`)).toBeVisible();
 
       await adminPage.goto("/traceability");
+      await expect(adminPage.getByRole("heading", { name: "Product Journey" })).toBeVisible();
       await adminPage.getByTestId("select-product").selectOption({ label: `${PRODUCT_NAME} — DPP-TRUST` });
       const certifiedStage = adminPage.getByRole("row").filter({ hasText: STAGE_NAME });
       await expect(certifiedStage).toContainText(`${CERTIFICATION_NAME} · verified`);

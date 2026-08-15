@@ -24,6 +24,7 @@ const USERS = [
   { id: "e2e10000-0000-4000-8000-000000000002", email: "manager@e2e.local", role: "manager", organization_id: ORGANIZATIONS.a },
   { id: "e2e10000-0000-4000-8000-000000000003", email: "viewer@e2e.local", role: "viewer", organization_id: ORGANIZATIONS.a },
   { id: "e2e10000-0000-4000-8000-000000000004", email: "admin-b@e2e.local", role: "admin", organization_id: ORGANIZATIONS.b },
+  { id: "e2e10000-0000-4000-8000-000000000006", email: "logout-user@e2e.local", role: "viewer", organization_id: ORGANIZATIONS.a },
 ];
 const SUPPLIER_USER = {
   id: "e2e10000-0000-4000-8000-000000000005",
@@ -157,6 +158,12 @@ assertOk((await client.from("evidence_uploads").insert({
   storage_path: `evidence/${DPP_TRUST_EVIDENCE_ID}/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.pdf`,
   document_type: "certificate",
   status: "pending_review",
+  content_sha256: "d".repeat(64),
+  scan_status: "clean",
+  scan_started_at: new Date().toISOString(),
+  scan_completed_at: new Date().toISOString(),
+  scan_engine: "deterministic-local-fixture",
+  scan_result: "clean",
   uploaded_by: USERS[0].id,
   uploaded_at: new Date().toISOString(),
   original_filename: "dpp-certification-trust.pdf",

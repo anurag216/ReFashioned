@@ -1,4 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 const SUPPLIER_NAME = "Tenant A Supplier";
 const PRODUCT_NAME = "Tenant A Product";
@@ -88,7 +90,7 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     const task = supplierPage.getByRole("listitem").filter({ hasText: STAGE_NAME });
     await expect(task).toContainText(`${PRODUCT_NAME} — ${STAGE_NAME}`);
     await expect(task).toContainText("Evidence document");
-    await expect(task).toContainText("Status: not submitted");
+    await expect(task).toContainText(/Status:\s*Not submitted/i);
     await expect(supplierPage.locator("body")).not.toContainText(/Tenant B Secret Product|Tenant B organization|Tenant B supplier/i);
     await expect(supplierPage.getByRole("link", { name: /^dashboard$/i })).toHaveCount(0);
 
@@ -105,7 +107,36 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
       mimeType: "application/pdf",
       buffer: Buffer.from("%PDF-1.4\n% deterministic E2E supplier evidence\n%%EOF\n"),
     });
-    await expect(task).toContainText("Status: pending review");
+    await expect(task).toContainText("Status: Security scan pending");
+    await expect(task.getByRole("button", { name: "View submission" })).toHaveCount(0);
+
+    // Local-only deterministic scanner fixture uses service_role; no browser or
+    // production path can attest a clean verdict.
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey || !["127.0.0.1", "localhost"].includes(new URL(supabaseUrl).hostname)) {
+      throw new Error("A local Supabase service-role scanner fixture is required");
+    }
+    const scanner = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: evidence, error: evidenceError } = await scanner.from("evidence_uploads")
+      .select("id,storage_bucket,storage_path,size_bytes,mime_type").eq("lifecycle_stage_id", "e2e50000-0000-4000-8000-000000000001").single();
+    if (evidenceError || !evidence) throw new Error(`Scanner fixture could not resolve evidence: ${evidenceError?.message}`);
+    const { data: storedObject, error: downloadError } = await scanner.storage
+      .from(evidence.storage_bucket).download(evidence.storage_path);
+    if (downloadError || !storedObject) throw new Error(`Scanner fixture could not download stored evidence: ${downloadError?.message}`);
+    const bytes = Buffer.from(await storedObject.arrayBuffer());
+    if (bytes.byteLength !== evidence.size_bytes || bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      throw new Error("Scanner fixture rejected stored evidence identity");
+    }
+    const { error: scanError } = await scanner.rpc("record_evidence_scan_result", {
+      p_evidence_id: evidence.id, p_storage_bucket: evidence.storage_bucket, p_storage_path: evidence.storage_path,
+      p_size_bytes: evidence.size_bytes, p_declared_mime: evidence.mime_type, p_detected_mime: "application/pdf",
+      p_content_sha256: createHash("sha256").update(bytes).digest("hex"), p_verdict: "clean",
+      p_scan_engine: "deterministic-local-fixture", p_scan_result: "clean",
+    });
+    if (scanError) throw new Error(`Scanner fixture verdict failed: ${scanError.message}`);
+    await supplierPage.reload();
+    await expect(task).toContainText("Status: Ready for review");
     const viewSubmission = task.getByRole("button", { name: "View submission" });
     await expect(viewSubmission).toBeVisible();
 
@@ -114,6 +145,17 @@ test("supplier invitation, evidence, and revocation lifecycle", async ({ browser
     await viewSubmission.click();
     await expect(viewSubmission).toBeEnabled();
     await expect(task.getByText("Document access was not authorized.")).toHaveCount(0);
+
+    await adminPage.goto("/traceability");
+    await adminPage.getByTestId("select-product").selectOption({ label: `${PRODUCT_NAME} — TENANT-A` });
+    const adminStage = adminPage.getByRole("row").filter({ hasText: STAGE_NAME });
+    await expect(adminStage).toContainText("Ready for review");
+    await adminStage.getByRole("button", { name: "Approve" }).click();
+    await expect(adminStage).toContainText("approved");
+    const promptAnswers = ["E2E Supplier Evidence Standard", "2030-12-31"];
+    adminPage.on("dialog", async dialog => dialog.accept(promptAnswers.shift()));
+    await adminStage.getByRole("button", { name: "Create certification" }).click();
+    await expect(adminStage).toContainText("E2E Supplier Evidence Standard · verified");
 
     // The redeemed token is unusable in a clean, unauthenticated browser.
     replayContext = await browser.newContext({ baseURL });
