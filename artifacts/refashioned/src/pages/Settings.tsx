@@ -13,6 +13,9 @@ export function Settings() {
   const [orgSaving,      setOrgSaving]      = useState(false);
   const [orgSaveError,   setOrgSaveError]   = useState<string | null>(null);
   const [orgSaveSuccess, setOrgSaveSuccess] = useState(false);
+  const [erasureStatus, setErasureStatus] = useState<string | null>(null);
+  const [erasureError, setErasureError] = useState<string | null>(null);
+  const [erasureSubmitting, setErasureSubmitting] = useState(false);
   const { isAdmin } = usePermissions();
   const { data: org } = useOrg();
   const orgId = org?.id ?? null;
@@ -54,7 +57,20 @@ export function Settings() {
     { id: "preferences", label: "Preferences" },
     { id: "api", label: "API Access" },
     { id: "security", label: "Security" },
+    { id: "privacy", label: "Privacy & Data" },
   ];
+
+  async function requestErasure() {
+    if (!supabase || !window.confirm("Request deletion of your account identity and access? This cannot be processed without additional verification.")) return;
+    setErasureSubmitting(true); setErasureError(null);
+    // The RPC has no subject argument: the database derives identity from auth.uid().
+    // Generated types are refreshed from local Supabase as part of database validation.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.rpc as any)("request_personal_data_erasure");
+    if (error) setErasureError(error.message);
+    else setErasureStatus((data as { status?: string } | null)?.status ?? "requested");
+    setErasureSubmitting(false);
+  }
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -226,7 +242,23 @@ export function Settings() {
         </div>
       )}
       {activeTab === "team" && isAdmin && <TeamAccess />}
-      {activeTab !== "account" && activeTab !== "team" && (
+      {activeTab === "privacy" && (
+        <section className="bg-card rounded-lg p-6 shadow-sm border border-card-border max-w-2xl" aria-labelledby="privacy-heading">
+          <h2 id="privacy-heading" className="text-lg font-semibold text-foreground">Privacy &amp; Data</h2>
+          <h3 className="font-medium text-foreground mt-5">Request account deletion</h3>
+          <p className="text-sm text-muted-foreground mt-2">
+            This requests removal of your account access and personal identity. Company sustainability,
+            compliance, evidence, and security records may be preserved when the product or an approved retention policy requires them.
+          </p>
+          {erasureStatus && <p role="status" className="mt-4 text-sm text-green-700">Request received. Current status: <strong>{erasureStatus}</strong>.</p>}
+          {erasureError && <p role="alert" className="mt-4 text-sm text-red-700">{erasureError}</p>}
+          <button type="button" onClick={requestErasure} disabled={erasureSubmitting || erasureStatus === "requested" || erasureStatus === "processing"}
+            className="mt-5 border border-red-300 text-red-700 hover:bg-red-50 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60">
+            {erasureSubmitting ? "Submitting…" : "Request account deletion"}
+          </button>
+        </section>
+      )}
+      {activeTab !== "account" && activeTab !== "team" && activeTab !== "privacy" && (
         <div className="bg-card rounded-lg p-12 shadow-sm border border-card-border text-center">
           <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <SettingsIcon className="w-6 h-6 text-muted-foreground" />
