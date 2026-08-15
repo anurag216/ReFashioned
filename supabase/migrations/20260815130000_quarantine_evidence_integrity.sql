@@ -226,6 +226,8 @@ END $$;
 
 REVOKE ALL ON FUNCTION public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.record_evidence_scan_result(uuid,text,text,bigint,text,text,text,text,text,text) TO service_role;
+REVOKE ALL ON FUNCTION public.current_actor_can_read_evidence_object(text,text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.current_actor_can_read_evidence_object(text,text) TO authenticated;
 REVOKE ALL ON FUNCTION public.finalize_evidence_upload(uuid),public.get_evidence_download_target(uuid),public.review_evidence_upload(uuid,text,text),public.create_certification_from_evidence(uuid,text,date) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.finalize_evidence_upload(uuid),public.get_evidence_download_target(uuid),public.review_evidence_upload(uuid,text,text),public.create_certification_from_evidence(uuid,text,date) TO authenticated;
 REVOKE ALL ON FUNCTION public.get_my_supplier_evidence_tasks(),public.get_my_organization_evidence(uuid) FROM PUBLIC,anon;
