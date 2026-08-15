@@ -69,7 +69,21 @@ jobs:
           diff -u artifacts/refashioned/src/lib/database.types.ts /tmp/database.types.ts
 
       - name: Lint database schema
-        run: supabase db lint --local --level warning
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          lint_output="$(supabase db lint --local --level warning 2>&1)"
+          lint_status=$?
+          set -e
+          printf '%s\n' "$lint_output"
+          if [[ $lint_status -ne 0 ]]; then
+            exit "$lint_status"
+          fi
+          if grep -Eq '"level"[[:space:]]*:[[:space:]]*"error"' <<<"$lint_output"; then
+            echo "Database lint reported errors." >&2
+            exit 1
+          fi
 
       - name: Run pgTAP authorization tests
         run: supabase test db

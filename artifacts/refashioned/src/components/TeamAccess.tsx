@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useQueryClient } from "@tanstack/react-query";
 
 type Role="admin"|"manager"|"viewer";
-type Member={member_id:string;email:string;role:Role;created_at:string};
+type Member={member_id:string;email:string;role:Role};
 type Invite={invite_id:string;email:string;role:Role;expires_at:string;state:string};
 type View={members:Member[];invites:Invite[]};
 
@@ -14,7 +14,7 @@ function isAccessView(value:unknown):value is View{
  return Array.isArray(candidate.members)&&candidate.members.every(member=>{
   if(!member||typeof member!=="object")return false;
   const row=member as Partial<Member>;
-  return typeof row.member_id==="string"&&typeof row.email==="string"&&isRole(row.role)&&typeof row.created_at==="string";
+  return typeof row.member_id==="string"&&typeof row.email==="string"&&isRole(row.role);
  })&&Array.isArray(candidate.invites)&&candidate.invites.every(invite=>{
   if(!invite||typeof invite!=="object")return false;
   const row=invite as Partial<Invite>;
