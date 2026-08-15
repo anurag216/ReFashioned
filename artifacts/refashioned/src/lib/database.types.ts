@@ -315,6 +315,7 @@ export type Database = {
           public_payload: Json | null
           public_slug: string
           published_at: string | null
+          published_certification_ids: string[]
           updated_at: string
         }
         Insert: {
@@ -328,6 +329,7 @@ export type Database = {
           public_payload?: Json | null
           public_slug: string
           published_at?: string | null
+          published_certification_ids?: string[]
           updated_at?: string
         }
         Update: {
@@ -341,6 +343,7 @@ export type Database = {
           public_payload?: Json | null
           public_slug?: string
           published_at?: string | null
+          published_certification_ids?: string[]
           updated_at?: string
         }
         Relationships: [

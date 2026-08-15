@@ -32,6 +32,10 @@ const SUPPLIER_USER = {
 const PRODUCT_A_ID = "e2e30000-0000-4000-8000-000000000001";
 const SUPPLIER_A_ID = "e2e40000-0000-4000-8000-000000000001";
 const LIFECYCLE_STAGE_ID = "e2e50000-0000-4000-8000-000000000001";
+const DPP_TRUST_PRODUCT_ID = "e2e30000-0000-4000-8000-000000000003";
+const DPP_TRUST_SUPPLIER_ID = "e2e40000-0000-4000-8000-000000000003";
+const DPP_TRUST_STAGE_ID = "e2e50000-0000-4000-8000-000000000003";
+const DPP_TRUST_EVIDENCE_ID = "e2e60000-0000-4000-8000-000000000003";
 
 function assertOk(error, operation) {
   if (error) throw new Error(`${operation}: ${error.message}`);
@@ -87,6 +91,7 @@ assertOk((await client.from("organization_members").upsert(USERS.map((user, inde
 assertOk((await client.from("products").upsert([
   { id: PRODUCT_A_ID, organization_id: ORGANIZATIONS.a, name: "Tenant A Product", sku: "TENANT-A", season: "Evergreen", status: "draft" },
   { id: "e2e30000-0000-4000-8000-000000000002", organization_id: ORGANIZATIONS.b, name: "Tenant B Secret Product", sku: "TENANT-B", season: "Evergreen", status: "draft" },
+  { id: DPP_TRUST_PRODUCT_ID, organization_id: ORGANIZATIONS.a, name: "DPP Certification Trust Product", sku: "DPP-TRUST", season: "Evergreen", status: "draft" },
 ])).error, "upsert products");
 
 assertOk((await client.from("suppliers").upsert({
@@ -98,6 +103,16 @@ assertOk((await client.from("suppliers").upsert({
   status: "not-invited",
   contact_name: "E2E Contact",
 })).error, "upsert supplier");
+
+assertOk((await client.from("suppliers").upsert({
+  id: DPP_TRUST_SUPPLIER_ID,
+  organization_id: ORGANIZATIONS.a,
+  name: "DPP Certification Trust Supplier",
+  location: "Local E2E",
+  tier: 1,
+  status: "active",
+  contact_name: "DPP Trust Contact",
+})).error, "upsert DPP certification trust supplier");
 
 // This identity deliberately starts outside every tenant and supplier. The UI
 // invitation redemption is responsible for creating its only authorization.
@@ -114,6 +129,40 @@ assertOk((await client.from("lifecycle_stages").upsert({
   stage_name: "E2E Material Production",
   stage_order: 1,
 })).error, "upsert supplier evidence lifecycle stage");
+
+// This fixture is independent from the destructive supplier lifecycle test.
+// The browser performs review, certification creation, publication, and
+// revocation; setup supplies only a real pending-review evidence row.
+assertOk((await client.from("digital_product_passports").delete().eq("product_id", DPP_TRUST_PRODUCT_ID)).error, "clear DPP certification trust passport");
+assertOk((await client.from("certifications").delete().eq("evidence_id", DPP_TRUST_EVIDENCE_ID)).error, "clear DPP certification trust certifications");
+assertOk((await client.from("evidence_uploads").delete().eq("id", DPP_TRUST_EVIDENCE_ID)).error, "clear DPP certification trust evidence");
+assertOk((await client.from("lifecycle_stages").upsert({
+  id: DPP_TRUST_STAGE_ID,
+  organization_id: ORGANIZATIONS.a,
+  product_id: DPP_TRUST_PRODUCT_ID,
+  supplier_id: DPP_TRUST_SUPPLIER_ID,
+  stage_name: "DPP Certification Trust Stage",
+  subtitle: "Dedicated certification disclosure fixture",
+  stage_order: 1,
+  co2_impact_kg: 1,
+  water_usage_l: 1,
+  flagged: false,
+})).error, "upsert DPP certification trust stage");
+assertOk((await client.from("evidence_uploads").insert({
+  id: DPP_TRUST_EVIDENCE_ID,
+  organization_id: ORGANIZATIONS.a,
+  supplier_id: DPP_TRUST_SUPPLIER_ID,
+  lifecycle_stage_id: DPP_TRUST_STAGE_ID,
+  storage_bucket: "compliance_docs",
+  storage_path: `evidence/${DPP_TRUST_EVIDENCE_ID}/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.pdf`,
+  document_type: "certificate",
+  status: "pending_review",
+  uploaded_by: USERS[0].id,
+  uploaded_at: new Date().toISOString(),
+  original_filename: "dpp-certification-trust.pdf",
+  mime_type: "application/pdf",
+  size_bytes: 100,
+})).error, "insert DPP certification trust pending evidence");
 
 const [stageResult, productResult, supplierResult, organizationResult] = await Promise.all([
   client.from("lifecycle_stages").select("id,organization_id,product_id,supplier_id,stage_name").eq("id", LIFECYCLE_STAGE_ID).single(),

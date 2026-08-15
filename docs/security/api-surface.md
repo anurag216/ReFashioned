@@ -63,6 +63,32 @@ supplier revocation takes effect on the next authorization check. Storage upload
 authorization uses a narrow boolean helper in the non-API `private` schema;
 evidence rows remain inaccessible directly.
 
+## Public certification disclosure contract
+
+A public DPP keeps two separate security concepts. **Snapshot membership** is
+the deterministic set of certification IDs that an administrator deliberately
+admitted during the last publish or republish operation. Those IDs are
+server-private and never appear in the public RPC response. A manager creating
+a verified certification therefore cannot publish a new external claim.
+
+**Current validity** is re-evaluated on every public request. An admitted claim
+is returned only while its certification is verified and unexpired, its evidence
+is still approved, and its evidence, supplier, lifecycle stage, product, and
+organization scope remain consistent. Revocation, expiry, or evidence
+invalidation consequently removes the claim on the next request without a
+republish. A later eligible certification remains hidden until an administrator
+republishes.
+
+Evidence and certification IDs are private. The only public certification fields
+are its name and validity date; evidence metadata, documents, storage paths,
+supplier identity, tenant identity, reviewer/uploader identity, and internal IDs
+are never disclosed. Seeing a public certification grants no access to its
+underlying evidence document. Product, material, impact, and lifecycle data stay
+frozen in the deliberately published DPP snapshot; validity filtering never
+rebuilds or publishes unrelated draft changes. Version 1 snapshots remain
+available without retroactively attached claims and upgrade to version 2 only on
+an administrator republish.
+
 ## Private helpers
 
 Trigger functions and internal `SECURITY DEFINER` routines—including audit,
