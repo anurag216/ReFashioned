@@ -329,20 +329,11 @@ export function SupplierPortal() {
                       ))}
                     </div>
 
-                    {/* Data completeness */}
+                    {/* Operational state: the legacy supplier percentage was not deterministic. */}
                     <div className="lg:w-36 shrink-0">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] text-muted-foreground font-medium">Data completeness</span>
-                        <span className={`text-xs font-semibold ${s.dataCompleteness === 100 ? "text-green-600" : s.dataCompleteness >= 60 ? "text-amber-600" : "text-red-500"}`}>{s.dataCompleteness}%</span>
-                      </div>
-                      <div className="bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${s.dataCompleteness}%`,
-                            backgroundColor: s.dataCompleteness === 100 ? "#6AE096" : s.dataCompleteness >= 60 ? "#F59E0B" : "#EF4444"
-                          }}
-                        />
+                        <span className="text-[10px] text-muted-foreground font-medium">Operational status</span>
+                        <span className="text-xs font-semibold text-foreground">{sc.label}</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-1">{s.lastActivity}</p>
                     </div>

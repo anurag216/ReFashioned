@@ -11,10 +11,10 @@ test("login and logout lifecycle completes cleanly", async ({ page }) => {
   await page.getByRole("button", { name: /sign in/i }).click();
 
   await page.waitForURL("**/dashboard", { timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: /sustainability metrics/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /pilot readiness/i })).toBeVisible();
 
   await page.getByTitle("Sign out").click();
   await expect(page.getByPlaceholder("you@company.com")).toBeVisible();
   await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /sustainability metrics/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /pilot readiness/i })).toHaveCount(0);
 });

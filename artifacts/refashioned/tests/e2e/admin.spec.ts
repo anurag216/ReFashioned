@@ -8,8 +8,8 @@ test.use({ storageState: adminStorageState });
 test("admin dashboard renders the expected admin shell", async ({ page }) => {
   await page.goto("/dashboard");
 
-  await expect(page.getByRole("heading", { name: /sustainability metrics/i })).toBeVisible();
-  await expect(page.getByText("Total Products")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /pilot readiness/i })).toBeVisible();
+  await expect(page.getByRole("main").getByText("Products", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /^dashboard$/i }).first()).toBeVisible();
 });
 
