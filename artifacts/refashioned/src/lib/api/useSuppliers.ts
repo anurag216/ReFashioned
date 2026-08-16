@@ -13,7 +13,8 @@ export type SupplierRow = {
   status: SupplierStatus;
   stage: string;
   certs: { name: string; status: "uploaded" | "missing" | "expiring" }[];
-  dataCompleteness: number;
+  /** @deprecated Legacy manually maintained field; never use as authoritative readiness. */
+  dataCompleteness?: number;
   lastActivity: string;
 };
 
@@ -27,7 +28,7 @@ async function fetchSuppliers(orgId: string | null): Promise<SupplierRow[]> {
 
   const { data, error } = await client
     .from("suppliers")
-    .select("id, name, contact_name, location, tier, status, stage, data_completeness, last_activity")
+    .select("id, name, contact_name, location, tier, status, stage, last_activity")
     .eq("organization_id", orgId)
     .order("tier", { ascending: true });
 
@@ -42,7 +43,6 @@ async function fetchSuppliers(orgId: string | null): Promise<SupplierRow[]> {
     status:           (r.status        as SupplierStatus) ?? "not-invited",
     stage:            (r.stage         as string) ?? "—",
     certs:            [],
-    dataCompleteness: (r.data_completeness as number) ?? 0,
     lastActivity:     (r.last_activity as string) ?? "—",
   }));
 }
