@@ -34,7 +34,7 @@ BEGIN
         (CASE WHEN b.core_done<2 THEN 1 ELSE 0 END + CASE WHEN b.material_done=0 THEN 1 ELSE 0 END +
          CASE WHEN b.supply_done=0 THEN 1 ELSE 0 END + (b.stage_count-b.trusted_count) +
          CASE WHEN b.cert_required AND b.valid_cert_count=0 THEN 1 ELSE 0 END + CASE WHEN NOT b.dpp_ready THEN 1 ELSE 0 END) AS blocker_count,
-        CASE WHEN b.stage_count=0 THEN 'missing' WHEN b.trusted_count=b.stage_count THEN 'trusted' WHEN b.rejected_count>0 THEN 'rejected' WHEN b.quarantined_count>0 THEN 'quarantined' ELSE 'pending_review' END evidence_state,
+        CASE WHEN b.stage_count=0 THEN 'missing' WHEN b.trusted_count=b.stage_count THEN 'trusted' WHEN b.rejected_count>0 THEN 'rejected' WHEN b.quarantined_count>0 THEN 'quarantined' WHEN b.pending_review_count>0 THEN 'pending_review' ELSE 'missing' END evidence_state,
         CASE WHEN NOT b.cert_required THEN 'not_applicable' WHEN b.valid_cert_count>0 THEN CASE WHEN b.expiring_count>0 THEN 'expiring_soon' ELSE 'valid' END WHEN b.revoked_count>0 THEN 'revoked' WHEN b.expired_count>0 THEN 'expired' ELSE 'missing' END certification_state,
         CASE WHEN b.dpp_published AND b.dpp_dirty THEN 'republish_needed' WHEN b.dpp_published THEN 'published' WHEN b.dpp_ready THEN 'ready_to_publish' WHEN b.has_dpp THEN 'blocked' ELSE 'draft' END dpp_state,
         array_remove(ARRAY[
@@ -54,6 +54,7 @@ BEGIN
           (SELECT count(*) FROM public.lifecycle_stages s WHERE s.product_id=p.id AND s.organization_id=v_org AND EXISTS(SELECT 1 FROM public.evidence_uploads e WHERE e.lifecycle_stage_id=s.id AND e.organization_id=v_org AND e.status='approved' AND e.scan_status='clean' AND e.content_sha256 IS NOT NULL)) trusted_count,
           (SELECT count(*) FROM public.evidence_uploads e JOIN public.lifecycle_stages s ON s.id=e.lifecycle_stage_id WHERE s.product_id=p.id AND e.organization_id=v_org AND e.status='rejected') rejected_count,
           (SELECT count(*) FROM public.evidence_uploads e JOIN public.lifecycle_stages s ON s.id=e.lifecycle_stage_id WHERE s.product_id=p.id AND e.organization_id=v_org AND e.status='quarantined') quarantined_count,
+          (SELECT count(*) FROM public.evidence_uploads e JOIN public.lifecycle_stages s ON s.id=e.lifecycle_stage_id WHERE s.product_id=p.id AND e.organization_id=v_org AND e.status='pending_review') pending_review_count,
           EXISTS(SELECT 1 FROM public.product_materials m WHERE m.product_id=p.id AND m.certification_required) cert_required,
           (SELECT count(DISTINCT c.id) FROM public.certifications c JOIN public.evidence_uploads e ON e.id=c.evidence_id JOIN public.lifecycle_stages s ON s.id=e.lifecycle_stage_id WHERE s.product_id=p.id AND c.organization_id=v_org AND e.organization_id=v_org AND c.verification_status='verified' AND c.expiry_date>=current_date AND e.status='approved' AND e.scan_status='clean' AND e.content_sha256 IS NOT NULL) valid_cert_count,
           (SELECT count(*) FROM public.certifications c JOIN public.evidence_uploads e ON e.id=c.evidence_id JOIN public.lifecycle_stages s ON s.id=e.lifecycle_stage_id WHERE s.product_id=p.id AND c.organization_id=v_org AND c.verification_status='revoked') revoked_count,

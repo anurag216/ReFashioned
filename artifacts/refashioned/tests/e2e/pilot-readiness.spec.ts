@@ -4,6 +4,7 @@ import path from "node:path";
 const adminStorageState=path.resolve(new URL("../../playwright/.auth/admin.json",import.meta.url).pathname);
 const PRODUCT="Pilot Readiness E2E Product";
 const STAGE="Pilot Readiness E2E lifecycle stage";
+const evidenceActionText=`Every lifecycle stage requires approved, clean, fingerprinted evidence for “${PRODUCT}”.`;
 test.use({storageState:adminStorageState});
 test.describe.configure({retries:0});
 
@@ -14,7 +15,8 @@ test("trusted evidence removes the dedicated readiness blocker and increases com
   await expect(productRow).toContainText("Evidence: Pending review");
   const beforeText=await productRow.locator("strong").innerText();
   const before=Number(beforeText.replace("%",""));
-  await expect(page.getByText(new RegExp(`fingerprinted evidence.*${PRODUCT}`,"i"))).toBeVisible();
+  const actionCenter=page.locator('section[aria-labelledby="action-center-title"]');
+  await expect(actionCenter.getByText(evidenceActionText,{exact:true})).toBeVisible();
 
   await page.goto("/traceability");
   await page.getByTestId("select-product").selectOption({label:`${PRODUCT} — PILOT-READY`});
@@ -28,5 +30,5 @@ test("trusted evidence removes the dedicated readiness blocker and increases com
   await expect(updatedRow).toContainText("Evidence: Trusted");
   const after=Number((await updatedRow.locator("strong").innerText()).replace("%",""));
   expect(after).toBeGreaterThan(before);
-  await expect(page.getByText(new RegExp(`fingerprinted evidence.*${PRODUCT}`,"i"))).toHaveCount(0);
+  await expect(actionCenter.getByText(evidenceActionText,{exact:true})).toHaveCount(0);
 });

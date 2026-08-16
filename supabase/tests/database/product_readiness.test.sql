@@ -27,17 +27,17 @@ INSERT INTO public.products(id,organization_id,name,sku,status) VALUES
  ('a4000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000001','Incomplete readiness product','READY-A','draft'),
  ('a4000000-0000-4000-8000-000000000002','a2000000-0000-4000-8000-000000000002','Tenant B private product','READY-B','draft');
 
-SELECT plan(58);
+SELECT plan(60);
 SELECT has_function('public','get_organization_product_readiness',ARRAY[]::text[],'product readiness RPC exists');
 SELECT has_function('public','get_organization_action_center',ARRAY[]::text[],'Action Center RPC exists');
 SELECT ok((SELECT prosecdef FROM pg_catalog.pg_proc WHERE oid='public.get_organization_product_readiness()'::regprocedure),'readiness is security definer');
 SELECT ok((SELECT proconfig @> ARRAY['search_path=pg_catalog'] FROM pg_catalog.pg_proc WHERE oid='public.get_organization_product_readiness()'::regprocedure),'readiness fixes pg_catalog search path');
 SELECT ok((SELECT prosecdef FROM pg_catalog.pg_proc WHERE oid='public.get_organization_action_center()'::regprocedure),'Action Center is security definer');
 SELECT ok((SELECT proconfig @> ARRAY['search_path=pg_catalog'] FROM pg_catalog.pg_proc WHERE oid='public.get_organization_action_center()'::regprocedure),'Action Center fixes pg_catalog search path');
-SELECT ok(NOT has_function_privilege('PUBLIC','public.get_organization_product_readiness()','EXECUTE'),'PUBLIC cannot execute readiness');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.get_organization_product_readiness()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'PUBLIC cannot execute readiness');
 SELECT ok(NOT has_function_privilege('anon','public.get_organization_product_readiness()','EXECUTE'),'anon cannot execute readiness');
 SELECT ok(has_function_privilege('authenticated','public.get_organization_product_readiness()','EXECUTE'),'authenticated can execute readiness');
-SELECT ok(NOT has_function_privilege('PUBLIC','public.get_organization_action_center()','EXECUTE'),'PUBLIC cannot execute Action Center');
+SELECT ok(NOT EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE p.oid='public.get_organization_action_center()'::regprocedure AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),'PUBLIC cannot execute Action Center');
 SELECT ok(NOT has_function_privilege('anon','public.get_organization_action_center()','EXECUTE'),'anon cannot execute Action Center');
 SELECT ok(has_function_privilege('authenticated','public.get_organization_action_center()','EXECUTE'),'authenticated can execute Action Center');
 
@@ -77,12 +77,13 @@ INSERT INTO public.lifecycle_stages(id,organization_id,product_id,supplier_id,st
 SELECT is((public.get_organization_product_readiness()->0->'dimensions'->'supply_chain'->>'percent')::int,100,'supplier-linked stage completes supply chain');
 SELECT is((public.get_organization_product_readiness()->0->'dimensions'->'evidence'->>'applicable')::boolean,true,'stage makes evidence applicable');
 SELECT is((public.get_organization_product_readiness()->0->'dimensions'->'evidence'->>'percent')::int,0,'stage without evidence is not trusted');
+SELECT is(public.get_organization_product_readiness()->0->>'evidence_state','missing','stage without evidence is missing rather than pending review');
 SELECT is((public.get_organization_product_readiness()->0->>'overall_percent')::int,(100*4/5)::int,'stage changes denominator and completed requirements deterministically');
 
 -- Each insert obeys the PR15 integrity state machine; rows are removed between states.
 INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes,upload_expires_at)
  VALUES('a8000000-0000-4000-8000-000000000001','a2000000-0000-4000-8000-000000000001','a6000000-0000-4000-8000-000000000001','a7000000-0000-4000-8000-000000000001','evidence/a8/1.pdf','certificate','upload_pending','a1000000-0000-4000-8000-000000000001','one.pdf','application/pdf',10,now()+interval '1 hour');
-SELECT is(public.get_organization_product_readiness()->0->>'evidence_state','pending_review','upload pending does not become trusted');
+SELECT is(public.get_organization_product_readiness()->0->>'evidence_state','missing','upload pending remains missing until it reaches review');
 DELETE FROM public.evidence_uploads WHERE id='a8000000-0000-4000-8000-000000000001';
 INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes)
  VALUES('a8000000-0000-4000-8000-000000000002','a2000000-0000-4000-8000-000000000001','a6000000-0000-4000-8000-000000000001','a7000000-0000-4000-8000-000000000001','evidence/a8/2.pdf','certificate','quarantined','a1000000-0000-4000-8000-000000000001','two.pdf','application/pdf',10);
@@ -90,6 +91,7 @@ SELECT is(public.get_organization_product_readiness()->0->>'evidence_state','qua
 DELETE FROM public.evidence_uploads WHERE id='a8000000-0000-4000-8000-000000000002';
 INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes,content_sha256,scan_status,scan_started_at,scan_completed_at,scan_engine,scan_result)
  VALUES('a8000000-0000-4000-8000-000000000003','a2000000-0000-4000-8000-000000000001','a6000000-0000-4000-8000-000000000001','a7000000-0000-4000-8000-000000000001','evidence/a8/3.pdf','certificate','pending_review','a1000000-0000-4000-8000-000000000001','three.pdf','application/pdf',10,repeat('a',64),'clean',now(),now(),'test','clean');
+SELECT is(public.get_organization_product_readiness()->0->>'evidence_state','pending_review','clean evidence awaiting review is pending review');
 SELECT is((public.get_organization_product_readiness()->0->'dimensions'->'evidence'->>'percent')::int,0,'clean pending-review evidence is not verified');
 DELETE FROM public.evidence_uploads WHERE id='a8000000-0000-4000-8000-000000000003';
 INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes,content_sha256,scan_status,scan_started_at,scan_completed_at,scan_engine,scan_result,reviewed_by,reviewed_at,rejection_reason)
