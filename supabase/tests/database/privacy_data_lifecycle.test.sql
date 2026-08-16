@@ -20,7 +20,7 @@ SELECT col_is_null('public','audit_logs','profile_id','audit actor is nullable f
 SELECT col_is_null('public','audit_events','actor_id','legacy audit actor is nullable for erasure');
 SELECT col_is_null('public','evidence_uploads','uploaded_by','preserved evidence can lose uploader identity');
 SELECT col_is_null('public','certifications','created_by','preserved certification can lose creator identity');
-SELECT col_type_is('public','organizations','lifecycle_status','public.organization_lifecycle_status','tenant lifecycle is explicit');
+SELECT col_type_is('public','organizations','lifecycle_status','organization_lifecycle_status','tenant lifecycle is explicit');
 
 INSERT INTO auth.users(id,instance_id,aud,role,email) VALUES
  ('d0000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','privacy-admin@test.invalid'),
@@ -103,7 +103,7 @@ SELECT is((SELECT organization_id FROM public.evidence_uploads WHERE id='d810000
 SELECT is((SELECT supplier_id FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'d3000000-0000-0000-0000-000000000001'::uuid,'evidence supplier remains unchanged');
 SELECT is((SELECT lifecycle_stage_id FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'d8000000-0000-0000-0000-000000000001'::uuid,'evidence lifecycle stage remains unchanged');
 SELECT is((SELECT storage_bucket FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'compliance_docs','evidence bucket remains unchanged');
-SELECT like((SELECT storage_path FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'evidence/d8100000-%','evidence storage path remains unchanged');
+SELECT is((SELECT storage_path FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'evidence/d8100000-0000-0000-0000-000000000001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf','evidence storage path remains unchanged');
 SELECT is((SELECT content_sha256 FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),repeat('a',64),'evidence fingerprint remains unchanged');
 SELECT is((SELECT scan_status FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'clean','evidence scan verdict remains unchanged');
 SELECT is((SELECT status FROM public.evidence_uploads WHERE id='d8100000-0000-0000-0000-000000000001'),'approved','evidence review state remains unchanged');
@@ -134,7 +134,7 @@ SELECT lives_ok($$SELECT public.service_prepare_personal_identity_erasure('d0000
 RESET ROLE;
 SELECT is((SELECT count(*) FROM public.supplier_access_memberships WHERE profile_id='d0000000-0000-0000-0000-000000000003'),0::bigint,'supplier authorization is removed');
 SELECT is(public.is_active_supplier_for('d0000000-0000-0000-0000-000000000003','d3000000-0000-0000-0000-000000000001'),false,'same supplier identity no longer authorizes workspace access');
-SELECT like((SELECT email FROM public.supplier_contacts WHERE id='d4000000-0000-0000-0000-000000000001'),'erased-%@invalid.example','mapped supplier contact is irreversibly anonymized');
+SELECT is((SELECT email FROM public.supplier_contacts WHERE id='d4000000-0000-0000-0000-000000000001'),'erased-d4000000-0000-0000-0000-000000000001@invalid.example','mapped supplier contact is irreversibly anonymized');
 SELECT is((SELECT name FROM public.supplier_contacts WHERE id='d4000000-0000-0000-0000-000000000002'),'Other Contact','cross-tenant contact remains untouched');
 SELECT is((SELECT count(*) FROM public.suppliers WHERE id='d3000000-0000-0000-0000-000000000001'),1::bigint,'supplier company remains');
 
@@ -147,8 +147,8 @@ SELECT set_config('request.jwt.claims','{"role":"service_role"}',true);
 SET LOCAL ROLE service_role;
 SELECT public.service_purge_terminal_invitation_personal_data(now()-interval '1 day');
 RESET ROLE;
-SELECT like((SELECT email FROM public.organization_member_invites WHERE id='d6000000-0000-0000-0000-000000000001'),'erased-%@invalid.example','terminal internal invitation email is anonymized after supplied cutoff');
-SELECT like((SELECT email FROM public.supplier_invites WHERE id='d7000000-0000-0000-0000-000000000001'),'erased-%@invalid.example','terminal supplier invitation email is anonymized after supplied cutoff');
+SELECT is((SELECT email FROM public.organization_member_invites WHERE id='d6000000-0000-0000-0000-000000000001'),'erased-d6000000-0000-0000-0000-000000000001@invalid.example','terminal internal invitation email is anonymized after supplied cutoff');
+SELECT is((SELECT email FROM public.supplier_invites WHERE id='d7000000-0000-0000-0000-000000000001'),'erased-d7000000-0000-0000-0000-000000000001@invalid.example','terminal supplier invitation email is anonymized after supplied cutoff');
 SELECT is((SELECT email FROM public.organization_member_invites WHERE id='d6000000-0000-0000-0000-000000000002'),'usable-internal@test.invalid','usable invitation is not prematurely cleaned');
 UPDATE public.organizations SET lifecycle_status='deletion_requested' WHERE id='d1000000-0000-0000-0000-000000000001';
 SELECT set_config('request.jwt.claim.sub','d0000000-0000-0000-0000-000000000001',true);
