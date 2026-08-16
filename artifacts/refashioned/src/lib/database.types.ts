@@ -720,6 +720,73 @@ export type Database = {
         }
         Relationships: []
       }
+      privacy_erasure_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          denial_reason: string | null
+          denied_at: string | null
+          id: string
+          organization_id: string | null
+          processing_started_at: string | null
+          request_type: string
+          requested_at: string
+          requester_profile_id: string | null
+          status: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          denial_reason?: string | null
+          denied_at?: string | null
+          id?: string
+          organization_id?: string | null
+          processing_started_at?: string | null
+          request_type?: string
+          requested_at?: string
+          requester_profile_id?: string | null
+          status?: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          denial_reason?: string | null
+          denied_at?: string | null
+          id?: string
+          organization_id?: string | null
+          processing_started_at?: string | null
+          request_type?: string
+          requested_at?: string
+          requester_profile_id?: string | null
+          status?: Database["public"]["Enums"]["privacy_erasure_status"]
+          subject_profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "privacy_erasure_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "privacy_erasure_requests_requester_profile_id_fkey"
+            columns: ["requester_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "privacy_erasure_requests_subject_profile_id_fkey"
+            columns: ["subject_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_materials: {
         Row: {
           certification_required: boolean | null
@@ -786,73 +853,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      privacy_erasure_requests: {
-        Row: {
-          completed_at: string | null
-          created_at: string
-          denial_reason: string | null
-          denied_at: string | null
-          id: string
-          organization_id: string | null
-          processing_started_at: string | null
-          request_type: string
-          requested_at: string
-          requester_profile_id: string | null
-          status: Database["public"]["Enums"]["privacy_erasure_status"]
-          subject_profile_id: string | null
-        }
-        Insert: {
-          completed_at?: string | null
-          created_at?: string
-          denial_reason?: string | null
-          denied_at?: string | null
-          id?: string
-          organization_id?: string | null
-          processing_started_at?: string | null
-          request_type?: string
-          requested_at?: string
-          requester_profile_id?: string | null
-          status?: Database["public"]["Enums"]["privacy_erasure_status"]
-          subject_profile_id?: string | null
-        }
-        Update: {
-          completed_at?: string | null
-          created_at?: string
-          denial_reason?: string | null
-          denied_at?: string | null
-          id?: string
-          organization_id?: string | null
-          processing_started_at?: string | null
-          request_type?: string
-          requested_at?: string
-          requester_profile_id?: string | null
-          status?: Database["public"]["Enums"]["privacy_erasure_status"]
-          subject_profile_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "privacy_erasure_requests_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "privacy_erasure_requests_requester_profile_id_fkey"
-            columns: ["requester_profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "privacy_erasure_requests_subject_profile_id_fkey"
-            columns: ["subject_profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1607,7 +1607,20 @@ export const Constants = {
     Enums: {},
   },
   public: {
-    Enums: {},
+    Enums: {
+      organization_lifecycle_status: [
+        "active",
+        "deletion_requested",
+        "suspended",
+        "tombstoned",
+      ],
+      privacy_erasure_status: [
+        "requested",
+        "processing",
+        "completed",
+        "denied",
+      ],
+    },
   },
 } as const
 
