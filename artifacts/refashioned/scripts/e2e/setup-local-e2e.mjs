@@ -42,6 +42,10 @@ const DPP_TRUST_PRODUCT_ID = "e2e30000-0000-4000-8000-000000000003";
 const DPP_TRUST_SUPPLIER_ID = "e2e40000-0000-4000-8000-000000000003";
 const DPP_TRUST_STAGE_ID = "e2e50000-0000-4000-8000-000000000003";
 const DPP_TRUST_EVIDENCE_ID = "e2e60000-0000-4000-8000-000000000003";
+const READINESS_PRODUCT_ID = "e2e30000-0000-4000-8000-000000000004";
+const READINESS_SUPPLIER_ID = "e2e40000-0000-4000-8000-000000000004";
+const READINESS_STAGE_ID = "e2e50000-0000-4000-8000-000000000004";
+const READINESS_EVIDENCE_ID = "e2e60000-0000-4000-8000-000000000004";
 
 function assertOk(error, operation) {
   if (error) throw new Error(`${operation}: ${error.message}`);
@@ -111,6 +115,7 @@ assertOk((await client.from("products").upsert([
   { id: PRODUCT_A_ID, organization_id: ORGANIZATIONS.a, name: "Tenant A Product", sku: "TENANT-A", season: "Evergreen", status: "draft" },
   { id: "e2e30000-0000-4000-8000-000000000002", organization_id: ORGANIZATIONS.b, name: "Tenant B Secret Product", sku: "TENANT-B", season: "Evergreen", status: "draft" },
   { id: DPP_TRUST_PRODUCT_ID, organization_id: ORGANIZATIONS.a, name: "DPP Certification Trust Product", sku: "DPP-TRUST", season: "Evergreen", status: "draft" },
+  { id: READINESS_PRODUCT_ID, organization_id: ORGANIZATIONS.a, name: "Pilot Readiness E2E Product", sku: "PILOT-READY", season: "Evergreen", status: "draft" },
 ])).error, "upsert products");
 
 assertOk((await client.from("suppliers").upsert({
@@ -132,6 +137,11 @@ assertOk((await client.from("suppliers").upsert({
   status: "active",
   contact_name: "DPP Trust Contact",
 })).error, "upsert DPP certification trust supplier");
+
+assertOk((await client.from("suppliers").upsert({
+  id: READINESS_SUPPLIER_ID, organization_id: ORGANIZATIONS.a, name: "Pilot Readiness E2E Supplier",
+  location: "Local E2E", tier: 1, status: "active", contact_name: "Pilot Readiness Contact",
+})).error, "upsert pilot readiness supplier");
 
 // This identity deliberately starts outside every tenant and supplier. The UI
 // invitation redemption is responsible for creating its only authorization.
@@ -188,6 +198,26 @@ assertOk((await client.from("evidence_uploads").insert({
   mime_type: "application/pdf",
   size_bytes: 100,
 })).error, "insert DPP certification trust pending evidence");
+
+// Dedicated readiness lifecycle: no other parallel test mutates these IDs.
+assertOk((await client.from("certifications").delete().eq("evidence_id", READINESS_EVIDENCE_ID)).error, "clear pilot readiness certifications");
+assertOk((await client.from("evidence_uploads").delete().eq("id", READINESS_EVIDENCE_ID)).error, "clear pilot readiness evidence");
+assertOk((await client.from("product_materials").delete().eq("product_id", READINESS_PRODUCT_ID)).error, "clear pilot readiness materials");
+assertOk((await client.from("product_materials").insert({ product_id: READINESS_PRODUCT_ID, material_name: "Pilot cotton", composition_percentage: 100, certification_required: false })).error, "insert pilot readiness material");
+assertOk((await client.from("lifecycle_stages").upsert({
+  id: READINESS_STAGE_ID, organization_id: ORGANIZATIONS.a, product_id: READINESS_PRODUCT_ID,
+  supplier_id: READINESS_SUPPLIER_ID, stage_name: "Pilot Readiness E2E lifecycle stage", stage_order: 1,
+  co2_impact_kg: 1, water_usage_l: 1, flagged: false,
+})).error, "upsert pilot readiness stage");
+assertOk((await client.from("evidence_uploads").insert({
+  id: READINESS_EVIDENCE_ID, organization_id: ORGANIZATIONS.a, supplier_id: READINESS_SUPPLIER_ID,
+  lifecycle_stage_id: READINESS_STAGE_ID, storage_bucket: "compliance_docs",
+  storage_path: `evidence/${READINESS_EVIDENCE_ID}/${"e".repeat(64)}.pdf`, document_type: "material_declaration",
+  status: "pending_review", content_sha256: "e".repeat(64), scan_status: "clean",
+  scan_started_at: new Date().toISOString(), scan_completed_at: new Date().toISOString(),
+  scan_engine: "deterministic-local-fixture", scan_result: "clean", uploaded_by: USERS[0].id,
+  uploaded_at: new Date().toISOString(), original_filename: "pilot-readiness.pdf", mime_type: "application/pdf", size_bytes: 100,
+})).error, "insert pilot readiness pending evidence");
 
 const [stageResult, productResult, supplierResult, organizationResult] = await Promise.all([
   client.from("lifecycle_stages").select("id,organization_id,product_id,supplier_id,stage_name").eq("id", LIFECYCLE_STAGE_ID).single(),

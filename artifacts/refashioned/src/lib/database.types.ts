@@ -1288,6 +1288,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      get_organization_action_center: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       get_organization_member_invite_metadata: {
         Args: { p_token: string }
         Returns: {
@@ -1297,6 +1301,10 @@ export type Database = {
           organization_name: string
           role: string
         }[]
+      }
+      get_organization_product_readiness: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       }
       get_product_passport_publication_state: {
         Args: { p_product_id: string }
@@ -1623,4 +1631,3 @@ export const Constants = {
     },
   },
 } as const
-
