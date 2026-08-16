@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SELECT plan(87);
 
 SELECT has_table('public','privacy_erasure_requests','privacy request state is server-owned');
-SELECT row_security_is('public','privacy_erasure_requests',true,'privacy requests enforce RLS');
+SELECT ok((SELECT relrowsecurity FROM pg_catalog.pg_class WHERE oid='public.privacy_erasure_requests'::regclass),'privacy requests enforce RLS');
 SELECT has_function('public','request_personal_data_erasure',ARRAY[]::text[],'self-service request has no arbitrary subject parameter');
 SELECT ok(position('pg_advisory_xact_lock' in pg_get_functiondef('public.request_personal_data_erasure()'::regprocedure))>0,'request serialization prevents concurrent open-row races');
 SELECT ok(has_function_privilege('authenticated','public.request_personal_data_erasure()','EXECUTE'),'authenticated may request own erasure');

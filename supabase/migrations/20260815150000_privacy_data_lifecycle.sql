@@ -478,13 +478,16 @@ BEGIN
   SELECT * INTO v FROM public.supplier_invites WHERE token_hash=encode(extensions.digest(p_token,'sha256'),'hex') FOR UPDATE;
   PERFORM 1 FROM public.organizations o WHERE o.id=v.organization_id AND o.lifecycle_status='active' FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'organization is not active' USING ERRCODE='42501'; END IF;
-  IF v.revoked_at IS NOT NULL OR v.redeemed_at IS NOT NULL OR v.expires_at<=now() THEN RAISE EXCEPTION 'invitation is no longer usable' USING ERRCODE='55000'; END IF;
+  IF v.revoked_at IS NOT NULL THEN RAISE EXCEPTION 'invitation was revoked'; END IF;
+  IF v.redeemed_at IS NOT NULL THEN RAISE EXCEPTION 'invitation was already redeemed'; END IF;
+  IF v.expires_at<=now() THEN RAISE EXCEPTION 'invitation has expired'; END IF;
   IF v_email IS NULL OR v_email='' OR lower(btrim(v.email)) IS DISTINCT FROM v_email THEN RAISE EXCEPTION 'sign in with the invited email address' USING ERRCODE='42501'; END IF;
   IF NOT EXISTS(SELECT 1 FROM public.profiles WHERE id=v_actor) OR EXISTS(SELECT 1 FROM public.organization_members WHERE profile_id=v_actor) THEN RAISE EXCEPTION 'separate supplier profile required' USING ERRCODE='42501'; END IF;
   IF EXISTS(SELECT 1 FROM public.supplier_access_memberships WHERE profile_id=v_actor AND revoked_at IS NULL) THEN RAISE EXCEPTION 'account already has active supplier access' USING ERRCODE='55000'; END IF;
   SELECT * INTO v_contact FROM public.supplier_contacts WHERE supplier_id=v.supplier_id AND lower(btrim(email))=lower(btrim(v.email)) FOR UPDATE;
   IF NOT FOUND THEN
     INSERT INTO public.supplier_contacts(supplier_id,name,email) VALUES(v.supplier_id,split_part(v.email,'@',1),lower(btrim(v.email))) RETURNING * INTO v_contact;
+    INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(v.organization_id,v_actor,'supplier_contact_created','supplier_contact',v_contact.id::text);
   ELSIF EXISTS(SELECT 1 FROM public.supplier_access_memberships WHERE supplier_contact_id=v_contact.id AND revoked_at IS NULL) THEN RAISE EXCEPTION 'supplier contact already has active portal access' USING ERRCODE='55000';
   END IF;
   UPDATE public.supplier_invites SET redeemed_at=now(),redeemed_by=v_actor,status='redeemed' WHERE id=v.id;
