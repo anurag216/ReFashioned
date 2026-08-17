@@ -27,6 +27,7 @@ const CarbonCalculator = lazy(() => import("./pages/CarbonCalculator").then(m =>
 const RegulatoryRadar = lazy(() => import("./pages/RegulatoryRadar").then(m => ({ default: m.RegulatoryRadar })));
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.NotFound })));
 const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ default: m.ProductCatalog })));
+const ProductWorkspace = lazy(() => import("./pages/ProductWorkspace").then(m => ({ default: m.ProductWorkspace })));
 const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ default: m.PublicPassport })));
 const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
 const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })));
@@ -285,6 +286,9 @@ export default function App() {
               </Route>
               <Route path="/products">
                 <ProductCatalog />
+              </Route>
+              <Route path="/products/:productId">
+                <ProductWorkspace />
               </Route>
               <Route path="/import">
                 <DataImport />
