@@ -3,7 +3,7 @@ import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
   Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
-  Users, Calculator, Globe, LogOut, Package, CreditCard, ScrollText,
+  Users, Calculator, Globe, LogOut, Package, CreditCard, ScrollText, Upload,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./lib/supabaseClient";
@@ -33,6 +33,7 @@ const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })))
 const TeamJoin = lazy(() => import("./pages/TeamJoin").then(m => ({ default: m.TeamJoin })));
 const Billing = lazy(() => import("./pages/Billing").then(m => ({ default: m.Billing })));
 const AuditLogPage = lazy(() => import("./pages/AuditLog").then(m => ({ default: m.AuditLogPage })));
+const DataImport = lazy(() => import("./pages/DataImport").then(m => ({ default: m.DataImport })));
 
 function DarkSpinner({ fullScreen = false }: { fullScreen?: boolean }) {
   const inner = (
@@ -70,6 +71,7 @@ function SidebarOrgBadge() {
 const navItems = [
   { path: "/dashboard",    label: "Dashboard",                icon: LayoutDashboard },
   { path: "/products",     label: "Products",                 icon: Package         },
+  { path: "/import",       label: "Import Data",              icon: Upload          },
   { path: "/traceability", label: "Lifecycle Traceability",   icon: GitBranch       },
   { path: "/profile",      label: "Brand Profile",            icon: Building2       },
   { path: "/passport",     label: "Digital Product Passport", icon: FileCheck       },
@@ -283,6 +285,9 @@ export default function App() {
               </Route>
               <Route path="/products">
                 <ProductCatalog />
+              </Route>
+              <Route path="/import">
+                <DataImport />
               </Route>
               <Route path="/traceability">
                 <Traceability onViewDPP={(id) => setLocation(`/passport?productId=${id}`)} />
