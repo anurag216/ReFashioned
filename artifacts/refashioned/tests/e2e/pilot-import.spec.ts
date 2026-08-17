@@ -21,6 +21,8 @@ test("admin imports canonical CSV while invalid rows fail closed", async ({ page
   await expect(page.getByText(/Import completed: 1 created/)).toBeVisible();
   await page.goto("/products");
   await expect(page.getByText("Pilot, Imported Tee", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Pilot, Imported Tee", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Pilot, Imported Tee", exact: true })).toBeVisible();
 
   await page.goto("/dashboard");
   const before = Number((await page.getByText("Pilot, Imported Tee", { exact: true }).locator("../..").locator("strong").innerText()).replace("%", ""));

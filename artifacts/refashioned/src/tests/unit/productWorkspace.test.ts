@@ -1,5 +1,5 @@
 import { describe,expect,it } from "vitest";
-import { blockerDestination,certificationLabel,dimensionValue,evidenceLabel,isWorkspaceReadOnly,materialComposition,metricValue } from "../../lib/productWorkspace";
+import { actionDestination,certificationLabel,dimensionValue,evidenceLabel,isWorkspaceReadOnly,materialComposition,metricValue } from "../../lib/productWorkspace";
 
 describe("product workspace presentation",()=>{
   it("formats readiness values without turning N/A into zero",()=>{
@@ -24,9 +24,9 @@ describe("product workspace presentation",()=>{
     expect(certificationLabel({...base,expiry_date:"2027-01-01"},new Date("2026-08-17T00:00:00Z"))).toBe("Valid");
   });
   it("deep-links blockers to the current product",()=>{
-    expect(blockerDestination("Missing evidence","p1")).toBe("/traceability?productId=p1");
-    expect(blockerDestination("Current DPP publication checks are not satisfied","p1")).toBe("/passport?productId=p1");
-    expect(blockerDestination("Material composition must total 100%","p1")).toBe("#materials");
+    expect(actionDestination("MISSING_EVIDENCE","p1")).toBe("/traceability?productId=p1");
+    expect(actionDestination("DPP_NOT_READY","p1")).toBe("/passport?productId=p1");
+    expect(actionDestination("MISSING_MATERIAL_DATA","p1")).toBe("#materials");
   });
   it("makes archived products read only",()=>{expect(isWorkspaceReadOnly("archived",true)).toBe(true);expect(isWorkspaceReadOnly("draft",true)).toBe(false);});
 });

@@ -3,9 +3,11 @@ import type { ReadinessDimension, ProductReadiness } from "./readiness";
 export type WorkspaceMaterial = { id:string; material_name:string; composition_percentage:number; certification_required:boolean };
 export type WorkspaceStage = { id:string; stage_name:string; stage_order:number|null; supplier_name:string|null; co2_impact_kg:number|null; water_usage_l:number|null; flagged:boolean; evidence_state:string };
 export type WorkspaceCertification = { id:string; name:string; verification_status:string; expiry_date:string|null; evidence_trusted:boolean };
+export type WorkspaceAction = { category:string; priority:string; severity:string; title:string; explanation:string; destination:string };
 export type ProductWorkspace = {
   product:{id:string;name:string;sku:string|null;season:string|null;status:string};
   readiness:ProductReadiness|null;
+  actions:WorkspaceAction[];
   materials:WorkspaceMaterial[];
   lifecycle:WorkspaceStage[];
   certifications:WorkspaceCertification[];
@@ -14,7 +16,7 @@ export type ProductWorkspace = {
 export function parseProductWorkspace(value:unknown):ProductWorkspace {
   if (!value || typeof value!=="object" || Array.isArray(value)) throw new Error("Product not found or access denied.");
   const row=value as ProductWorkspace;
-  if (!row.product?.id || !Array.isArray(row.materials) || !Array.isArray(row.lifecycle) || !Array.isArray(row.certifications)) throw new Error("Invalid product workspace response.");
+  if (!row.product?.id || !Array.isArray(row.actions) || !Array.isArray(row.materials) || !Array.isArray(row.lifecycle) || !Array.isArray(row.certifications)) throw new Error("Invalid product workspace response.");
   return row;
 }
 
@@ -38,12 +40,11 @@ export function certificationLabel(cert:WorkspaceCertification,today=new Date())
   return days<0 ? "Expired" : days<=30 ? "Expiring soon" : "Valid";
 }
 
-export function blockerDestination(blocker:string,productId:string) {
-  const text=blocker.toLowerCase();
-  if (text.includes("dpp")) return `/passport?productId=${productId}`;
-  if (text.includes("supplier") || text.includes("lifecycle") || text.includes("evidence")) return `/traceability?productId=${productId}`;
-  if (text.includes("material")) return "#materials";
-  if (text.includes("certification")) return "#certifications";
+export function actionDestination(category:string,productId:string) {
+  if (category.startsWith("DPP_")) return `/passport?productId=${productId}`;
+  if (["SUPPLIER_NOT_ONBOARDED","SUPPLIER_INVITE_PENDING","MISSING_EVIDENCE","EVIDENCE_QUARANTINED","EVIDENCE_PENDING_REVIEW","EVIDENCE_REJECTED"].includes(category)) return `/traceability?productId=${productId}`;
+  if (category==="MISSING_MATERIAL_DATA") return "#materials";
+  if (category.startsWith("CERTIFICATION_")) return "#certifications";
   return "#product-details";
 }
 
