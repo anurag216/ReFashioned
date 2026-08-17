@@ -1,4 +1,5 @@
 import { useState, useEffect, type ElementType } from "react";
+import { useSearch } from "wouter";
 import {
   AlertTriangle, Leaf, RefreshCw, Scissors, Droplets, Shirt,
   Package, FileCheck, Download, CheckCircle2, XCircle, Zap, Plus, Paperclip,
@@ -42,6 +43,7 @@ interface TraceRow {
 interface EvidenceRow { evidence_id:string; lifecycle_stage_id:string; document_type:string; original_filename:string; evidence_status:string; scan_status:string; uploaded_by:string|null; uploaded_at:string|null; reviewed_by:string|null; reviewed_at:string|null; rejection_reason:string|null; certification_id:string|null; certification_name:string|null; certification_status:string|null; certification_expiry:string|null }
 
 export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) => void }) {
+  const requestedProductId = new URLSearchParams(useSearch()).get("productId");
   const [products, setProducts] = useState<{ id: string; name: string; sku: string | null }[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState("");
@@ -82,7 +84,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         .order("name");
       const list = (data ?? []) as { id: string; name: string; sku: string | null }[];
       setProducts(list);
-      if (list.length > 0) setSelectedProduct(list[0].id);
+      if (list.length > 0) setSelectedProduct(list.some(product=>product.id===requestedProductId) ? requestedProductId! : list[0].id);
       setProductsLoading(false);
     }
     loadProducts();

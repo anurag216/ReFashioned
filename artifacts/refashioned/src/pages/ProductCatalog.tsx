@@ -8,6 +8,8 @@ import { usePermissions } from "../lib/auth/usePermissions";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOrg } from "../lib/api/useOrg";
 import { useProducts } from "../lib/api/useProducts";
+import { useProductReadiness } from "../lib/api/useReadiness";
+import { Link } from "wouter";
 
 type ProductStatus = "draft" | "in_review" | "published" | "archived";
 
@@ -33,6 +35,8 @@ const EMPTY_FORM: FormState = { name: "", sku: "", season: "", status: "draft" }
 
 export function ProductCatalog() {
   const { data: products = [], isLoading: loading, error: fetchErrorObj } = useProducts();
+  const { data: readiness = [] } = useProductReadiness();
+  const readinessByProduct = new Map(readiness.map(row => [row.product_id,row]));
   const { data: org } = useOrg();
   const orgId = org?.id ?? null;
   const queryClient = useQueryClient();
@@ -271,7 +275,7 @@ export function ProductCatalog() {
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                         <Package className="w-4 h-4 text-primary/70" />
                       </div>
-                      <span className="font-medium text-foreground truncate max-w-[200px]">{product.name}</span>
+                      <div><Link href={`/products/${product.id}`} className="font-medium text-foreground hover:text-primary hover:underline truncate max-w-[200px] block">{product.name}</Link>{readinessByProduct.get(product.id)&&<span className="text-xs text-muted-foreground">{readinessByProduct.get(product.id)!.overall_percent}% · {readinessByProduct.get(product.id)!.blocker_count} blockers</span>}</div>
                     </div>
                   </td>
                   <td className="px-5 py-4 hidden sm:table-cell">
