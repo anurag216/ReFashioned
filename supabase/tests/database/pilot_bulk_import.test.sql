@@ -14,7 +14,7 @@ INSERT INTO public.organization_members(id,organization_id,profile_id,role) VALU
  ('b3000000-0000-4000-8000-000000000003','b2000000-0000-4000-8000-000000000001','b1000000-0000-4000-8000-000000000003','viewer'),
  ('b3000000-0000-4000-8000-000000000004','b2000000-0000-4000-8000-000000000002','b1000000-0000-4000-8000-000000000004','admin');
 
-SELECT plan(44);
+SELECT plan(67);
 SELECT has_table('public','pilot_import_batches','batch staging exists');
 SELECT has_table('public','pilot_import_rows','row staging exists');
 SELECT has_function('private','pilot_import_context',ARRAY['uuid'],'implementation helper is private');
@@ -23,6 +23,9 @@ SELECT ok(NOT has_function_privilege('anon','private.pilot_import_context(uuid)'
 SELECT ok(NOT has_function_privilege('authenticated','private.pilot_import_context(uuid)','EXECUTE'),'private helper denies authenticated');
 SELECT ok(NOT has_function_privilege('anon','public.create_pilot_import_batch(text,text)','EXECUTE'),'anon cannot create import');
 SELECT ok(has_function_privilege('authenticated','public.create_pilot_import_batch(text,text)','EXECUTE'),'authenticated API role can reach authorized RPC');
+SELECT ok(NOT has_table_privilege('authenticated','public.pilot_import_batches','SELECT'),'authenticated cannot directly select import batches');
+SELECT ok(NOT has_table_privilege('authenticated','public.pilot_import_rows','SELECT'),'authenticated cannot directly select import rows');
+SELECT ok(NOT has_table_privilege('authenticated','public.pilot_import_batches','INSERT,UPDATE,DELETE') AND NOT has_table_privilege('authenticated','public.pilot_import_rows','INSERT,UPDATE,DELETE'),'authenticated cannot directly mutate staging tables');
 SELECT set_config('request.jwt.claim.sub','b1000000-0000-4000-8000-000000000003',true);
 SELECT throws_ok($$SELECT public.create_pilot_import_batch('products','x.csv')$$,'42501','import not found or not authorized','viewer cannot import');
 SELECT set_config('request.jwt.claim.sub','b1000000-0000-4000-8000-000000000005',true);
@@ -33,6 +36,8 @@ SELECT set_config('request.jwt.claim.sub','b1000000-0000-4000-8000-000000000001'
 SELECT set_config('test.products_batch',public.create_pilot_import_batch('products','products.csv')::text,true);
 SELECT lives_ok($$SELECT public.stage_pilot_import_rows(current_setting('test.products_batch')::uuid,'[{"name":"Imported tee","sku":"IMP-1","status":"draft"}]')$$,'admin stages products');
 SELECT is(public.validate_pilot_import_batch(current_setting('test.products_batch')::uuid)->>'status','validated','valid product validates');
+SELECT ok(NOT (public.get_pilot_import_batch(current_setting('test.products_batch')::uuid)->'rows'->0 ? 'raw_payload'),'batch projection never exposes raw payload');
+SELECT ok(NOT (public.get_pilot_import_batch(current_setting('test.products_batch')::uuid)->'rows'->0 ? 'normalized_payload'),'batch projection never exposes normalized payload');
 SELECT is(public.commit_pilot_import_batch(current_setting('test.products_batch')::uuid)->>'status','completed','valid product import succeeds');
 SELECT ok(EXISTS(SELECT 1 FROM public.products WHERE organization_id='b2000000-0000-4000-8000-000000000001' AND sku='IMP-1'),'product reached core table');
 SELECT ok(NOT EXISTS(SELECT 1 FROM public.pilot_import_rows WHERE batch_id=current_setting('test.products_batch')::uuid AND raw_payload IS NOT NULL),'completed import scrubs raw payloads');
@@ -83,6 +88,30 @@ SELECT set_config('test.existing_total',public.create_pilot_import_batch('produc
 SELECT public.stage_pilot_import_rows(current_setting('test.existing_total')::uuid,'[{"product_sku":"IMP-1","material_name":"Hemp","composition_percentage":"1","certification_required":"false"}]');
 SELECT is(public.validate_pilot_import_batch(current_setting('test.existing_total')::uuid)->>'status','failed_validation','existing plus imported material total over 100 is rejected');
 
+SELECT set_config('test.blank_composition',public.create_pilot_import_batch('product_materials','blank-composition.csv')::text,true);
+SELECT public.stage_pilot_import_rows(current_setting('test.blank_composition')::uuid,'[{"product_sku":"IMP-1","material_name":"Blank","composition_percentage":"","certification_required":"false"}]');
+SELECT is(public.validate_pilot_import_batch(current_setting('test.blank_composition')::uuid)->>'status','failed_validation','blank composition_percentage is rejected');
+SELECT throws_ok(format('SELECT public.commit_pilot_import_batch(%L::uuid)',current_setting('test.blank_composition')),'55000','batch is not valid for commit','blank composition batch cannot commit');
+
+INSERT INTO public.products(id,organization_id,name,sku,status) VALUES('b4000000-0000-4000-8000-000000000003','b2000000-0000-4000-8000-000000000001','Boolean product','BOOL-A','draft');
+SELECT set_config('test.blank_certification',public.create_pilot_import_batch('product_materials','blank-certification.csv')::text,true);
+SELECT public.stage_pilot_import_rows(current_setting('test.blank_certification')::uuid,'[{"product_sku":"BOOL-A","material_name":"Cotton","composition_percentage":"10","certification_required":""}]');
+SELECT is(public.validate_pilot_import_batch(current_setting('test.blank_certification')::uuid)->>'status','validated','blank certification_required is accepted');
+SELECT is((SELECT normalized_payload->>'certification_required' FROM public.pilot_import_rows WHERE batch_id=current_setting('test.blank_certification')::uuid),'false','blank certification_required normalizes to false');
+SELECT public.cancel_pilot_import_batch(current_setting('test.blank_certification')::uuid);
+
+SELECT set_config('test.blank_stage',public.create_pilot_import_batch('lifecycle_stages','blank-stage.csv')::text,true);
+SELECT public.stage_pilot_import_rows(current_setting('test.blank_stage')::uuid,'[{"product_sku":"IMP-1","supplier_reference":"SUP-1","stage_name":"Blank order","stage_order":""}]');
+SELECT is(public.validate_pilot_import_batch(current_setting('test.blank_stage')::uuid)->>'status','failed_validation','blank stage_order is rejected');
+SELECT throws_ok(format('SELECT public.commit_pilot_import_batch(%L::uuid)',current_setting('test.blank_stage')),'55000','batch is not valid for commit','blank stage_order batch cannot commit');
+
+SELECT set_config('test.invalid_supplier',public.create_pilot_import_batch('suppliers','invalid-supplier.csv')::text,true);
+SELECT public.stage_pilot_import_rows(current_setting('test.invalid_supplier')::uuid,'[{"supplier_reference":"BAD-PII","name":"Bad supplier","contact_name":"Private Name","contact_email":"not-an-email"}]');
+SELECT is(public.validate_pilot_import_batch(current_setting('test.invalid_supplier')::uuid)->>'status','failed_validation','invalid supplier CSV reaches terminal failed validation');
+SELECT ok((SELECT raw_payload IS NULL FROM public.pilot_import_rows WHERE batch_id=current_setting('test.invalid_supplier')::uuid),'failed validation scrubs raw supplier PII');
+SELECT ok((SELECT normalized_payload IS NULL FROM public.pilot_import_rows WHERE batch_id=current_setting('test.invalid_supplier')::uuid),'failed validation scrubs normalized supplier PII');
+SELECT ok((SELECT jsonb_array_length(validation_errors)>0 FROM public.pilot_import_rows WHERE batch_id=current_setting('test.invalid_supplier')::uuid),'failed validation preserves row errors');
+
 INSERT INTO public.products(id,organization_id,name,sku,status) VALUES('b4000000-0000-4000-8000-000000000002','b2000000-0000-4000-8000-000000000002','Tenant B product','PRIVATE-B','draft');
 INSERT INTO public.suppliers(id,organization_id,name,external_reference) VALUES('b6000000-0000-4000-8000-000000000002','b2000000-0000-4000-8000-000000000002','Tenant B supplier','PRIVATE-SUP-B');
 SELECT set_config('test.cross_scope',public.create_pilot_import_batch('lifecycle_stages','cross.csv')::text,true);
@@ -105,7 +134,15 @@ SELECT throws_ok(format('SELECT public.commit_pilot_import_batch(%L::uuid)',curr
 SELECT throws_ok(format('SELECT public.cancel_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','suspended tenant cannot cancel import');
 UPDATE public.organizations SET lifecycle_status='deletion_requested' WHERE id='b2000000-0000-4000-8000-000000000001';
 SELECT throws_ok(format('SELECT public.get_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','deletion-requested tenant cannot read import');
+SELECT throws_ok(format('SELECT public.stage_pilot_import_rows(%L::uuid,''[{"name":"No","sku":"NO"}]'')',current_setting('test.inactive_batch')),'42501','import not found or not authorized','deletion-requested tenant cannot stage import');
+SELECT throws_ok(format('SELECT public.validate_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','deletion-requested tenant cannot validate import');
+SELECT throws_ok(format('SELECT public.commit_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','deletion-requested tenant cannot commit import');
+SELECT throws_ok(format('SELECT public.cancel_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','deletion-requested tenant cannot cancel import');
 UPDATE public.organizations SET lifecycle_status='tombstoned' WHERE id='b2000000-0000-4000-8000-000000000001';
 SELECT throws_ok(format('SELECT public.get_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','tombstoned tenant cannot read import');
+SELECT throws_ok(format('SELECT public.stage_pilot_import_rows(%L::uuid,''[{"name":"No","sku":"NO"}]'')',current_setting('test.inactive_batch')),'42501','import not found or not authorized','tombstoned tenant cannot stage import');
+SELECT throws_ok(format('SELECT public.validate_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','tombstoned tenant cannot validate import');
+SELECT throws_ok(format('SELECT public.commit_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','tombstoned tenant cannot commit import');
+SELECT throws_ok(format('SELECT public.cancel_pilot_import_batch(%L::uuid)',current_setting('test.inactive_batch')),'42501','import not found or not authorized','tombstoned tenant cannot cancel import');
 SELECT * FROM finish();
 ROLLBACK;

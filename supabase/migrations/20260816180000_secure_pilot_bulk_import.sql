@@ -29,7 +29,6 @@ CREATE TABLE public.pilot_import_rows (
 ALTER TABLE public.pilot_import_batches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pilot_import_rows ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.pilot_import_batches, public.pilot_import_rows FROM PUBLIC,anon,authenticated;
-GRANT SELECT ON public.pilot_import_batches, public.pilot_import_rows TO authenticated;
 CREATE POLICY pilot_batches_select ON public.pilot_import_batches FOR SELECT TO authenticated
   USING (public.has_org_role(organization_id,ARRAY['admin','manager']));
 CREATE POLICY pilot_rows_select ON public.pilot_import_rows FOR SELECT TO authenticated USING (EXISTS (
@@ -77,7 +76,7 @@ CREATE FUNCTION public.validate_pilot_import_batch(p_batch_id uuid) RETURNS json
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE b public.pilot_import_batches; r record; n jsonb; e jsonb; v numeric; good int; bad int;
 BEGIN b:=private.pilot_import_context(p_batch_id);
- IF b.status NOT IN ('staging','failed_validation','validated') OR b.row_count=0 THEN RAISE EXCEPTION 'batch cannot be validated' USING ERRCODE='55000'; END IF;
+ IF b.status NOT IN ('staging','validated') OR b.row_count=0 THEN RAISE EXCEPTION 'batch cannot be validated' USING ERRCODE='55000'; END IF;
  FOR r IN SELECT * FROM public.pilot_import_rows WHERE batch_id=b.id ORDER BY row_number LOOP
   e:='[]'::jsonb;
   IF b.import_type='products' THEN
@@ -95,11 +94,11 @@ BEGIN b:=private.pilot_import_context(p_batch_id);
    IF (SELECT count(*) FROM public.pilot_import_rows x WHERE x.batch_id=b.id AND lower(btrim(x.raw_payload->>'supplier_reference'))=lower(n->>'supplier_reference'))>1 THEN e:=e||'"Duplicate supplier_reference in file"'::jsonb; END IF;
    n:=n||jsonb_build_object('match',EXISTS(SELECT 1 FROM public.suppliers s WHERE s.organization_id=b.organization_id AND lower(btrim(s.external_reference))=lower(n->>'supplier_reference')));
   ELSIF b.import_type='product_materials' THEN
-   n:=jsonb_build_object('product_sku',btrim(coalesce(r.raw_payload->>'product_sku','')),'material_name',btrim(coalesce(r.raw_payload->>'material_name','')),'composition_percentage',nullif(btrim(coalesce(r.raw_payload->>'composition_percentage','')),''),'certification_required',lower(btrim(coalesce(r.raw_payload->>'certification_required','false'))) IN ('true','yes','1'),'certification_required_token',lower(btrim(coalesce(r.raw_payload->>'certification_required','false'))));
+   n:=jsonb_build_object('product_sku',btrim(coalesce(r.raw_payload->>'product_sku','')),'material_name',btrim(coalesce(r.raw_payload->>'material_name','')),'composition_percentage',nullif(btrim(coalesce(r.raw_payload->>'composition_percentage','')),''),'certification_required',coalesce(nullif(lower(btrim(coalesce(r.raw_payload->>'certification_required',''))),''),'false') IN ('true','yes','1'),'certification_required_token',coalesce(nullif(lower(btrim(coalesce(r.raw_payload->>'certification_required',''))),''),'false'));
    IF n->>'product_sku'='' THEN e:=e||'"Required product_sku"'::jsonb; ELSIF NOT EXISTS(SELECT 1 FROM public.products p WHERE p.organization_id=b.organization_id AND lower(btrim(p.sku))=lower(n->>'product_sku')) THEN e:=e||to_jsonb('Unknown product_sku: '||(n->>'product_sku')); END IF;
    IF n->>'material_name'='' THEN e:=e||'"Required material_name"'::jsonb; END IF;
    IF n->>'certification_required_token' NOT IN ('true','false','yes','no','1','0') THEN e:=e||'"certification_required must be true or false"'::jsonb; END IF;
-   BEGIN v:=(n->>'composition_percentage')::numeric; IF v<=0 OR v>100 THEN e:=e||'"composition_percentage must be greater than 0 and at most 100"'::jsonb; END IF; EXCEPTION WHEN OTHERS THEN e:=e||'"Invalid composition_percentage"'::jsonb; v:=NULL; END;
+   IF n->>'composition_percentage' IS NULL THEN e:=e||'"Required composition_percentage"'::jsonb; v:=NULL; ELSE BEGIN v:=(n->>'composition_percentage')::numeric; IF v<=0 OR v>100 THEN e:=e||'"composition_percentage must be greater than 0 and at most 100"'::jsonb; END IF; EXCEPTION WHEN OTHERS THEN e:=e||'"Invalid composition_percentage"'::jsonb; v:=NULL; END; END IF;
    IF (SELECT count(*) FROM public.pilot_import_rows x WHERE x.batch_id=b.id AND lower(btrim(x.raw_payload->>'product_sku'))=lower(n->>'product_sku') AND lower(btrim(x.raw_payload->>'material_name'))=lower(n->>'material_name'))>1 THEN e:=e||'"Duplicate material row in file"'::jsonb; END IF;
    IF EXISTS(SELECT 1 FROM public.product_materials pm JOIN public.products p ON p.id=pm.product_id WHERE p.organization_id=b.organization_id AND lower(btrim(p.sku))=lower(n->>'product_sku') AND lower(btrim(pm.material_name))=lower(n->>'material_name')) THEN e:=e||'"Material already exists for product"'::jsonb; END IF;
    IF v IS NOT NULL AND ((SELECT coalesce(sum(pm.composition_percentage),0) FROM public.product_materials pm JOIN public.products p ON p.id=pm.product_id WHERE p.organization_id=b.organization_id AND lower(btrim(p.sku))=lower(n->>'product_sku')) + (SELECT coalesce(sum(CASE WHEN (x.raw_payload->>'composition_percentage') ~ '^[0-9]+([.][0-9]+)?$' THEN (x.raw_payload->>'composition_percentage')::numeric ELSE 0 END),0) FROM public.pilot_import_rows x WHERE x.batch_id=b.id AND lower(btrim(x.raw_payload->>'product_sku'))=lower(n->>'product_sku'))) > 100 THEN e:=e||to_jsonb('Composition total for SKU '||(n->>'product_sku')||' exceeds 100%'); END IF;
@@ -108,7 +107,7 @@ BEGIN b:=private.pilot_import_context(p_batch_id);
    IF NOT EXISTS(SELECT 1 FROM public.products p WHERE p.organization_id=b.organization_id AND lower(btrim(p.sku))=lower(n->>'product_sku')) THEN e:=e||to_jsonb('Unknown product_sku: '||(n->>'product_sku')); END IF;
    IF NOT EXISTS(SELECT 1 FROM public.suppliers s WHERE s.organization_id=b.organization_id AND lower(btrim(s.external_reference))=lower(n->>'supplier_reference')) THEN e:=e||to_jsonb('Unknown supplier_reference: '||(n->>'supplier_reference')); END IF;
    IF n->>'stage_name'='' THEN e:=e||'"Required stage_name"'::jsonb; END IF;
-   BEGIN IF (n->>'stage_order')::int<=0 THEN e:=e||'"stage_order must be positive"'::jsonb; END IF; EXCEPTION WHEN OTHERS THEN e:=e||'"Invalid stage_order"'::jsonb; END;
+   IF n->>'stage_order' IS NULL THEN e:=e||'"Required stage_order"'::jsonb; ELSE BEGIN IF (n->>'stage_order')::int<=0 THEN e:=e||'"stage_order must be positive"'::jsonb; END IF; EXCEPTION WHEN OTHERS THEN e:=e||'"Invalid stage_order"'::jsonb; END; END IF;
    IF (SELECT count(*) FROM public.pilot_import_rows x WHERE x.batch_id=b.id AND lower(btrim(x.raw_payload->>'product_sku'))=lower(n->>'product_sku') AND btrim(x.raw_payload->>'stage_order')=n->>'stage_order')>1 THEN e:=e||'"Duplicate lifecycle stage key in file"'::jsonb; END IF;
    IF EXISTS(SELECT 1 FROM public.lifecycle_stages ls JOIN public.products p ON p.id=ls.product_id WHERE ls.organization_id=b.organization_id AND p.organization_id=b.organization_id AND lower(btrim(p.sku))=lower(n->>'product_sku') AND ls.stage_order=CASE WHEN n->>'stage_order' ~ '^[0-9]+$' THEN (n->>'stage_order')::int END) THEN e:=e||'"Lifecycle stage already exists for product and stage_order"'::jsonb; END IF;
    BEGIN IF n->>'co2_impact_kg' IS NOT NULL AND (n->>'co2_impact_kg')::numeric<0 THEN e:=e||'"CO2 impact cannot be negative"'::jsonb; END IF; EXCEPTION WHEN OTHERS THEN e:=e||'"Invalid CO2 impact"'::jsonb; END;
@@ -118,6 +117,7 @@ BEGIN b:=private.pilot_import_context(p_batch_id);
  END LOOP;
  SELECT count(*) FILTER(WHERE status='valid'),count(*) FILTER(WHERE status='invalid') INTO good,bad FROM public.pilot_import_rows WHERE batch_id=b.id;
  UPDATE public.pilot_import_batches SET status=CASE WHEN bad=0 THEN 'validated' ELSE 'failed_validation' END,valid_row_count=good,invalid_row_count=bad,validated_at=now() WHERE id=b.id;
+ IF bad>0 THEN UPDATE public.pilot_import_rows SET raw_payload=NULL,normalized_payload=NULL WHERE batch_id=b.id; END IF;
  INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(b.organization_id,auth.uid(),'pilot_import_validated','pilot_import',b.id::text||':'||b.import_type||':'||good||':'||bad);
  RETURN jsonb_build_object('batch_id',b.id,'status',CASE WHEN bad=0 THEN 'validated' ELSE 'failed_validation' END,'row_count',good+bad,'valid_row_count',good,'invalid_row_count',bad);
 END $$;
@@ -127,6 +127,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE b public.pilot_import_batches; r record; created int:=0; matched int:=0; pid uuid; sid uuid;
 BEGIN PERFORM pg_advisory_xact_lock(hashtextextended(p_batch_id::text,0)); b:=private.pilot_import_context(p_batch_id); SELECT * INTO b FROM public.pilot_import_batches WHERE id=b.id FOR UPDATE;
  PERFORM pg_advisory_xact_lock(hashtextextended('pilot-import-org:'||b.organization_id::text,0));
+ PERFORM 1 FROM public.organizations o WHERE o.id=b.organization_id AND o.lifecycle_status='active' FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'import not found or not authorized' USING ERRCODE='42501'; END IF;
  IF b.status='validated' THEN PERFORM public.validate_pilot_import_batch(b.id); SELECT * INTO b FROM public.pilot_import_batches WHERE id=b.id; END IF;
  IF b.status<>'validated' OR b.invalid_row_count<>0 THEN RAISE EXCEPTION 'batch is not valid for commit' USING ERRCODE='55000'; END IF;
  UPDATE public.pilot_import_batches SET status='committing' WHERE id=b.id;
@@ -143,7 +144,7 @@ BEGIN PERFORM pg_advisory_xact_lock(hashtextextended(p_batch_id::text,0)); b:=pr
 END $$;
 
 CREATE FUNCTION public.cancel_pilot_import_batch(p_batch_id uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ DECLARE b public.pilot_import_batches; BEGIN b:=private.pilot_import_context(p_batch_id); IF b.status IN ('completed','committing','cancelled') THEN RAISE EXCEPTION 'batch cannot be cancelled' USING ERRCODE='55000'; END IF; UPDATE public.pilot_import_batches SET status='cancelled' WHERE id=b.id; UPDATE public.pilot_import_rows SET raw_payload=NULL,normalized_payload=NULL WHERE batch_id=b.id; INSERT INTO public.audit_logs(organization_id,profile_id,action,entity_type,entity_name) VALUES(b.organization_id,auth.uid(),'pilot_import_cancelled','pilot_import',b.id::text||':'||b.import_type||':'||b.row_count); END $$;
-CREATE FUNCTION public.get_pilot_import_batch(p_batch_id uuid) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$ DECLARE b public.pilot_import_batches; BEGIN b:=private.pilot_import_context(p_batch_id); RETURN jsonb_build_object('batch_id',b.id,'import_type',b.import_type,'file_name',b.file_name,'status',b.status,'row_count',b.row_count,'valid_row_count',b.valid_row_count,'invalid_row_count',b.invalid_row_count,'rows',(SELECT coalesce(jsonb_agg(jsonb_build_object('row_number',r.row_number,'normalized_payload',r.normalized_payload,'validation_errors',r.validation_errors,'status',r.status) ORDER BY r.row_number),'[]'::jsonb) FROM public.pilot_import_rows r WHERE r.batch_id=b.id)); END $$;
+CREATE FUNCTION public.get_pilot_import_batch(p_batch_id uuid) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog AS $$ DECLARE b public.pilot_import_batches; BEGIN b:=private.pilot_import_context(p_batch_id); RETURN jsonb_build_object('batch_id',b.id,'import_type',b.import_type,'file_name',b.file_name,'status',b.status,'row_count',b.row_count,'valid_row_count',b.valid_row_count,'invalid_row_count',b.invalid_row_count,'rows',(SELECT coalesce(jsonb_agg(jsonb_build_object('row_number',r.row_number,'validation_errors',r.validation_errors,'status',r.status) ORDER BY r.row_number),'[]'::jsonb) FROM public.pilot_import_rows r WHERE r.batch_id=b.id)); END $$;
 
 REVOKE ALL ON FUNCTION private.pilot_import_context(uuid),public.create_pilot_import_batch(text,text),public.stage_pilot_import_rows(uuid,jsonb),public.validate_pilot_import_batch(uuid),public.commit_pilot_import_batch(uuid),public.cancel_pilot_import_batch(uuid),public.get_pilot_import_batch(uuid) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.create_pilot_import_batch(text,text),public.stage_pilot_import_rows(uuid,jsonb),public.validate_pilot_import_batch(uuid),public.commit_pilot_import_batch(uuid),public.cancel_pilot_import_batch(uuid),public.get_pilot_import_batch(uuid) TO authenticated;

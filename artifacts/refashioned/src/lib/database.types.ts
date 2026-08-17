@@ -1311,12 +1311,12 @@ export type Database = {
           role: string
         }[]
       }
-      create_pilot_import_batch: {
-        Args: { p_file_name: string; p_import_type: string }
-        Returns: string
-      }
       create_organization_with_admin: {
         Args: { organization_name: string }
+        Returns: string
+      }
+      create_pilot_import_batch: {
+        Args: { p_file_name: string; p_import_type: string }
         Returns: string
       }
       create_supplier_contact: {
@@ -1562,10 +1562,6 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: string
       }
-      stage_pilot_import_rows: {
-        Args: { p_batch_id: string; p_rows: Json }
-        Returns: Json
-      }
       service_complete_personal_identity_erasure: {
         Args: { p_request_id: string }
         Returns: undefined
@@ -1577,6 +1573,10 @@ export type Database = {
       service_purge_terminal_invitation_personal_data: {
         Args: { p_cutoff: string }
         Returns: number
+      }
+      stage_pilot_import_rows: {
+        Args: { p_batch_id: string; p_rows: Json }
+        Returns: Json
       }
       supplier_identity_lock: {
         Args: { p_email: string; p_supplier_id: string }

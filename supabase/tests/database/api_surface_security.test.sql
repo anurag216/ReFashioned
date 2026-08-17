@@ -37,8 +37,8 @@ SELECT is(
     'cancel_evidence_upload_intent(p_evidence_id uuid)','cancel_pilot_import_batch(p_batch_id uuid)','commit_pilot_import_batch(p_batch_id uuid)',
     'create_certification_from_evidence(p_evidence_id uuid, p_name text, p_expiry_date date)',
     'create_evidence_upload_intent(p_lifecycle_stage_id uuid, p_document_type text, p_original_filename text, p_mime_type text, p_size_bytes bigint)',
-    'create_organization_member_invite(p_email text, p_role text)','create_pilot_import_batch(p_import_type text, p_file_name text)',
-    'create_organization_with_admin(organization_name text)','create_supplier_contact(p_supplier_id uuid, p_name text, p_email text)',
+    'create_organization_member_invite(p_email text, p_role text)','create_organization_with_admin(organization_name text)',
+    'create_pilot_import_batch(p_import_type text, p_file_name text)','create_supplier_contact(p_supplier_id uuid, p_name text, p_email text)',
     'create_supplier_invite(p_supplier_id uuid, p_email text)','current_actor_can_read_evidence_object(p_bucket text, p_path text)',
     'current_actor_can_upload_evidence(p_lifecycle_stage_id uuid)','current_actor_is_active_supplier_for(p_supplier_id uuid)',
     'delete_supplier_contact(p_supplier_contact_id uuid)','finalize_evidence_upload(p_evidence_id uuid)',
@@ -61,7 +61,7 @@ SELECT is((SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespac
 
 SELECT is((SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f') AND has_table_privilege('anon',c.oid,'SELECT,INSERT,UPDATE,DELETE')),0::bigint,'anon has no public table DML');
 SELECT ok((SELECT bool_and(NOT has_table_privilege('anon','public.'||t,'SELECT')) FROM unnest(ARRAY['organizations','organization_members','profiles','suppliers','supplier_contacts','supplier_invites','supplier_access_memberships','evidence_uploads','certifications','audit_logs','audit_events','digital_product_passports']) t),'anon cannot select sensitive tables');
-SELECT ok((SELECT bool_and(NOT has_table_privilege('authenticated','public.'||t,'SELECT,INSERT,UPDATE,DELETE')) FROM unnest(ARRAY['brands','users','audit_events','supplier_contacts','supplier_invites','organization_member_invites','supplier_access_memberships','evidence_uploads','certifications','digital_product_passports']) t),'RPC/server-only tables deny authenticated direct access');
+SELECT ok((SELECT bool_and(NOT has_table_privilege('authenticated','public.'||t,'SELECT,INSERT,UPDATE,DELETE')) FROM unnest(ARRAY['brands','users','audit_events','supplier_contacts','supplier_invites','organization_member_invites','supplier_access_memberships','evidence_uploads','certifications','digital_product_passports','pilot_import_batches','pilot_import_rows']) t),'RPC/server-only tables deny authenticated direct access');
 SELECT ok(has_table_privilege('authenticated','public.audit_logs','SELECT'),'authenticated retains scoped audit read');
 SELECT ok(NOT has_table_privilege('authenticated','public.audit_logs','INSERT,UPDATE,DELETE'),'authenticated cannot mutate audit log');
 SELECT ok(has_table_privilege('authenticated','public.profiles','SELECT,INSERT,UPDATE'),'profile onboarding privileges remain');
