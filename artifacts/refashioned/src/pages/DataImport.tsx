@@ -39,22 +39,21 @@ export function DataImport() {
   }
   async function validate() {
     if (!supabase || !rows.length) return; setBusy(true); setError(null);
-    const rpc = supabase.rpc.bind(supabase) as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
-    const created = await rpc("create_pilot_import_batch", { p_import_type: type, p_file_name: fileName });
+    const created = await supabase.rpc("create_pilot_import_batch", { p_import_type: type, p_file_name: fileName });
     if (created.error) { setError(created.error.message); setBusy(false); return; }
     const id = created.data as string; setBatchId(id);
-    const staged = await rpc("stage_pilot_import_rows", { p_batch_id: id, p_rows: rows });
+    const staged = await supabase.rpc("stage_pilot_import_rows", { p_batch_id: id, p_rows: rows });
     if (staged.error) { setError(staged.error.message); setBusy(false); return; }
-    const validated = await rpc("validate_pilot_import_batch", { p_batch_id: id });
+    const validated = await supabase.rpc("validate_pilot_import_batch", { p_batch_id: id });
     if (validated.error) { setError(validated.error.message); setBusy(false); return; }
     setResult(validated.data as Result);
-    const detail = await rpc("get_pilot_import_batch", { p_batch_id: id });
+    const detail = await supabase.rpc("get_pilot_import_batch", { p_batch_id: id });
     const data = detail.data as { rows?: { row_number: number; validation_errors: string[] }[] };
     setIssues((data.rows ?? []).filter(row => row.validation_errors.length)); setBusy(false);
   }
   async function commit() {
     if (!supabase || !batchId) return; setBusy(true); setError(null);
-    const { data, error } = await (supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>)("commit_pilot_import_batch", { p_batch_id: batchId });
+    const { data, error } = await supabase.rpc("commit_pilot_import_batch", { p_batch_id: batchId });
     if (error) setError(error.message); else {
       setResult(data as Result);
       await Promise.all(["products", "suppliers", "product-readiness", "action-center"].map(key => queryClient.invalidateQueries({ queryKey: [key] })));

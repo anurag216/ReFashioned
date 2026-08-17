@@ -34,16 +34,17 @@ SELECT is(
    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
    WHERE n.nspname='public' AND has_function_privilege('authenticated',p.oid,'EXECUTE')),
   ARRAY[
-    'cancel_evidence_upload_intent(p_evidence_id uuid)','create_certification_from_evidence(p_evidence_id uuid, p_name text, p_expiry_date date)',
+    'cancel_evidence_upload_intent(p_evidence_id uuid)','cancel_pilot_import_batch(p_batch_id uuid)','commit_pilot_import_batch(p_batch_id uuid)',
+    'create_certification_from_evidence(p_evidence_id uuid, p_name text, p_expiry_date date)',
     'create_evidence_upload_intent(p_lifecycle_stage_id uuid, p_document_type text, p_original_filename text, p_mime_type text, p_size_bytes bigint)',
-    'create_organization_member_invite(p_email text, p_role text)',
+    'create_organization_member_invite(p_email text, p_role text)','create_pilot_import_batch(p_import_type text, p_file_name text)',
     'create_organization_with_admin(organization_name text)','create_supplier_contact(p_supplier_id uuid, p_name text, p_email text)',
     'create_supplier_invite(p_supplier_id uuid, p_email text)','current_actor_can_read_evidence_object(p_bucket text, p_path text)',
     'current_actor_can_upload_evidence(p_lifecycle_stage_id uuid)','current_actor_is_active_supplier_for(p_supplier_id uuid)',
     'delete_supplier_contact(p_supplier_contact_id uuid)','finalize_evidence_upload(p_evidence_id uuid)',
     'get_evidence_download_target(p_evidence_id uuid)','get_my_organization_evidence(p_product_id uuid)',
     'get_my_supplier_access()','get_my_supplier_evidence_tasks()','get_organization_access_admin_view()',
-    'get_organization_action_center()','get_organization_member_invite_metadata(p_token text)','get_organization_product_readiness()',
+    'get_organization_action_center()','get_organization_member_invite_metadata(p_token text)','get_organization_product_readiness()','get_pilot_import_batch(p_batch_id uuid)',
     'get_product_passport_publication_state(p_product_id uuid)',
     'get_public_product_passport(p_public_slug text)','get_supplier_access_admin(p_supplier_id uuid)',
     'get_supplier_invite_metadata(p_token text)','has_org_role(target_organization_id uuid, allowed_roles text[])',
@@ -51,7 +52,8 @@ SELECT is(
     'redeem_organization_member_invite(p_token text)','redeem_supplier_invite(p_token text)','request_organization_deletion()','request_personal_data_erasure()','review_evidence_upload(p_evidence_id uuid, p_decision text, p_rejection_reason text)',
     'revoke_certification(p_certification_id uuid)','revoke_organization_member_access(p_member_id uuid, p_reason text)','revoke_organization_member_invite(p_invite_id uuid, p_reason text)','revoke_supplier_access(p_access_membership_id uuid, p_reason text)',
     'revoke_supplier_invite(p_invitation_id uuid)','rotate_product_passport_slug(p_product_id uuid)',
-    'unpublish_product_passport(p_product_id uuid)','update_organization_member_role(p_member_id uuid, p_new_role text, p_reason text)','update_supplier_contact(p_supplier_contact_id uuid, p_name text, p_email text)'
+    'stage_pilot_import_rows(p_batch_id uuid, p_rows jsonb)','unpublish_product_passport(p_product_id uuid)','update_organization_member_role(p_member_id uuid, p_new_role text, p_reason text)','update_supplier_contact(p_supplier_contact_id uuid, p_name text, p_email text)',
+    'validate_pilot_import_batch(p_batch_id uuid)'
   ]::text[], 'authenticated routine allowlist is exact');
 
 SELECT is((SELECT count(DISTINCT p.oid) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace CROSS JOIN LATERAL pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl WHERE n.nspname='public' AND acl.grantee=0 AND acl.privilege_type='EXECUTE'),0::bigint,'PUBLIC executes no public-schema routine');

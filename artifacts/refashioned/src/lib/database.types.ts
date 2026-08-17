@@ -720,6 +720,107 @@ export type Database = {
         }
         Relationships: []
       }
+      pilot_import_batches: {
+        Row: {
+          committed_at: string | null
+          created_at: string
+          created_by: string | null
+          file_name: string
+          id: string
+          import_type: string
+          invalid_row_count: number
+          organization_id: string
+          row_count: number
+          status: string
+          valid_row_count: number
+          validated_at: string | null
+        }
+        Insert: {
+          committed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          file_name: string
+          id?: string
+          import_type: string
+          invalid_row_count?: number
+          organization_id: string
+          row_count?: number
+          status?: string
+          valid_row_count?: number
+          validated_at?: string | null
+        }
+        Update: {
+          committed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          file_name?: string
+          id?: string
+          import_type?: string
+          invalid_row_count?: number
+          organization_id?: string
+          row_count?: number
+          status?: string
+          valid_row_count?: number
+          validated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pilot_import_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pilot_import_batches_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pilot_import_rows: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          normalized_payload: Json | null
+          raw_payload: Json | null
+          row_number: number
+          status: string
+          validation_errors: Json
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          normalized_payload?: Json | null
+          raw_payload?: Json | null
+          row_number: number
+          status?: string
+          validation_errors?: Json
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          normalized_payload?: Json | null
+          raw_payload?: Json | null
+          row_number?: number
+          status?: string
+          validation_errors?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pilot_import_rows_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "pilot_import_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       privacy_erasure_requests: {
         Row: {
           completed_at: string | null
@@ -1074,6 +1175,7 @@ export type Database = {
           contact_name: string | null
           created_at: string | null
           data_completeness: number | null
+          external_reference: string | null
           id: string
           last_activity: string | null
           location: string | null
@@ -1087,6 +1189,7 @@ export type Database = {
           contact_name?: string | null
           created_at?: string | null
           data_completeness?: number | null
+          external_reference?: string | null
           id?: string
           last_activity?: string | null
           location?: string | null
@@ -1100,6 +1203,7 @@ export type Database = {
           contact_name?: string | null
           created_at?: string | null
           data_completeness?: number | null
+          external_reference?: string | null
           id?: string
           last_activity?: string | null
           location?: string | null
@@ -1170,6 +1274,14 @@ export type Database = {
         Args: { p_evidence_id: string }
         Returns: undefined
       }
+      cancel_pilot_import_batch: {
+        Args: { p_batch_id: string }
+        Returns: undefined
+      }
+      commit_pilot_import_batch: {
+        Args: { p_batch_id: string }
+        Returns: Json
+      }
       create_certification_from_evidence: {
         Args: { p_evidence_id: string; p_expiry_date: string; p_name: string }
         Returns: string
@@ -1198,6 +1310,10 @@ export type Database = {
           raw_token: string
           role: string
         }[]
+      }
+      create_pilot_import_batch: {
+        Args: { p_file_name: string; p_import_type: string }
+        Returns: string
       }
       create_organization_with_admin: {
         Args: { organization_name: string }
@@ -1304,6 +1420,10 @@ export type Database = {
       }
       get_organization_product_readiness: {
         Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      get_pilot_import_batch: {
+        Args: { p_batch_id: string }
         Returns: Json
       }
       get_product_passport_publication_state: {
@@ -1442,6 +1562,10 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: string
       }
+      stage_pilot_import_rows: {
+        Args: { p_batch_id: string; p_rows: Json }
+        Returns: Json
+      }
       service_complete_personal_identity_erasure: {
         Args: { p_request_id: string }
         Returns: undefined
@@ -1473,6 +1597,10 @@ export type Database = {
       update_supplier_contact: {
         Args: { p_email: string; p_name: string; p_supplier_contact_id: string }
         Returns: undefined
+      }
+      validate_pilot_import_batch: {
+        Args: { p_batch_id: string }
+        Returns: Json
       }
     }
     Enums: {
@@ -1631,4 +1759,3 @@ export const Constants = {
     },
   },
 } as const
-
