@@ -33,7 +33,7 @@ BEGIN
   RETURN jsonb_build_object(
     'product',jsonb_build_object('id',v_product.id,'name',v_product.name,'sku',v_product.sku,'season',v_product.season,'status',v_product.status),
     'readiness',v_readiness,
-    'actions',COALESCE((SELECT jsonb_agg(jsonb_build_object('category',a->>'category','priority',a->>'priority','severity',a->>'severity','title',a->>'title','explanation',a->>'explanation','destination',a->>'destination') ORDER BY a->>'priority',a->>'category') FROM jsonb_array_elements(public.get_organization_action_center()) a WHERE a->>'product_id'=p_product_id::text),'[]'::jsonb),
+    'actions',COALESCE((SELECT jsonb_agg(jsonb_build_object('category',a->>'category','priority',a->>'priority','severity',a->>'severity','title',a->>'title','explanation',a->>'explanation','destination',a->>'destination') ORDER BY action_ordinality) FROM jsonb_array_elements(public.get_organization_action_center()) WITH ORDINALITY action_center(a,action_ordinality) WHERE a->>'product_id'=p_product_id::text),'[]'::jsonb),
     'materials',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.id,'material_name',m.material_name,'composition_percentage',m.composition_percentage,'certification_required',m.certification_required) ORDER BY m.material_name,m.id) FROM public.product_materials m WHERE m.product_id=p_product_id),'[]'::jsonb),
     'lifecycle',COALESCE((SELECT jsonb_agg(jsonb_build_object(
       'id',s.id,'stage_name',s.stage_name,'stage_order',s.stage_order,'supplier_name',supplier.name,
