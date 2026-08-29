@@ -29,6 +29,7 @@ test("provider failures remain fail-closed instead of becoming clean verdicts", 
 
 test("browser callers are re-authorized against live evidence upload permissions", () => {
   assert.match(scanner, /service\.auth\.getUser\(jwt\)/);
-  assert.match(scanner, /evidence\.uploaded_by !== userId/);
   assert.match(scanner, /current_actor_can_upload_evidence/);
+  assert.doesNotMatch(scanner, /body\.organization/i);
+  assert.doesNotMatch(scanner, /body\.supplier/i);
 });
