@@ -46,7 +46,6 @@ Deno.serve(async (request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-  const scannerToken = Deno.env.get("EVIDENCE_SCANNER_TOKEN") ?? "";
   const cloudmersiveKey = Deno.env.get("CLOUDMERSIVE_API_KEY") ?? "";
   const cloudmersiveBaseUrl = (Deno.env.get("CLOUDMERSIVE_VIRUS_API_BASE_URL") ?? "").replace(/\/+$/, "");
 
@@ -63,23 +62,19 @@ Deno.serve(async (request) => {
   if (!body.evidenceId || !/^[0-9a-f-]{36}$/i.test(body.evidenceId)) return response("Invalid evidence id", 400);
 
   const authorization = request.headers.get("authorization") ?? "";
-  const trustedOperator = Boolean(scannerToken) && authorization === `Bearer ${scannerToken}`;
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  if (!match) return response("Unauthorized", 401);
+  const jwt = match[1];
+
   const service = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-
-  let userClient: ReturnType<typeof createClient> | null = null;
-  if (!trustedOperator) {
-    const match = authorization.match(/^Bearer\s+(.+)$/i);
-    if (!match) return response("Unauthorized", 401);
-    const jwt = match[1];
-    const { data: userData, error: userError } = await service.auth.getUser(jwt);
-    if (userError || !userData.user) return response("Unauthorized", 401);
-    userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-  }
+  const { data: userData, error: userError } = await service.auth.getUser(jwt);
+  if (userError || !userData.user) return response("Unauthorized", 401);
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   const { data, error: evidenceError } = await service
     .from("evidence_uploads")
@@ -93,17 +88,15 @@ Deno.serve(async (request) => {
   if (evidence.status !== "quarantined" || evidence.scan_status !== "pending" || evidence.integrity_legacy_accepted) {
     return response("Evidence is not scan eligible", 409);
   }
-  if (!trustedOperator) {
-    if (!userClient) return response("Not authorized", 403);
-    // Re-use the authoritative live authorization predicate instead of trusting
-    // the historical uploader identity. This permits current org admins/managers
-    // to recover supplier or legacy pending evidence while preserving tenant and
-    // supplier scope, and lets revoked users fail closed immediately.
-    const { data: allowed, error: authorizationError } = await userClient.rpc("current_actor_can_upload_evidence", {
-      p_lifecycle_stage_id: evidence.lifecycle_stage_id,
-    });
-    if (authorizationError || allowed !== true) return response("Not authorized", 403);
-  }
+
+  // Re-use the authoritative live authorization predicate instead of trusting
+  // the historical uploader identity. This permits current org admins/managers
+  // to recover supplier or legacy pending evidence while preserving tenant and
+  // supplier scope, and lets revoked users fail closed immediately.
+  const { data: allowed, error: authorizationError } = await userClient.rpc("current_actor_can_upload_evidence", {
+    p_lifecycle_stage_id: evidence.lifecycle_stage_id,
+  });
+  if (authorizationError || allowed !== true) return response("Not authorized", 403);
 
   const { data: object, error: downloadError } = await service.storage
     .from(evidence.storage_bucket)
@@ -129,11 +122,9 @@ Deno.serve(async (request) => {
       signal: AbortSignal.timeout(25_000),
     });
   } catch {
-    // Leave scan_status=pending so a transient provider/network failure can be retried.
     return response("Malware provider unavailable; evidence remains quarantined", 502);
   }
   if (!providerResponse.ok) {
-    // Provider errors must never be interpreted as clean or infected.
     return response("Malware provider rejected scan; evidence remains quarantined", 502);
   }
 
