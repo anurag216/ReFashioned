@@ -3,7 +3,7 @@ import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
   Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
-  Users, Calculator, Globe, LogOut, Package, CreditCard, ScrollText, Upload,
+  Users, Globe, LogOut, Package, CreditCard, ScrollText, Upload,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./lib/supabaseClient";
@@ -76,9 +76,8 @@ const navItems = [
   { path: "/traceability", label: "Lifecycle Traceability",   icon: GitBranch       },
   { path: "/profile",      label: "Brand Profile",            icon: Building2       },
   { path: "/passport",     label: "Digital Product Passport", icon: FileCheck       },
-  { path: "/reports/csrd", label: "CSRD Report",              icon: ClipboardList   },
+  { path: "/reports/csrd", label: "CSRD Data Readiness",     icon: ClipboardList   },
   { path: "/suppliers",    label: "Supplier Portal",          icon: Users           },
-  { path: "/calculator",   label: "Carbon Calculator",        icon: Calculator      },
   { path: "/regulatory",   label: "Regulatory Radar",         icon: Globe           },
   { path: "/settings",     label: "Settings",                 icon: SettingsIcon    },
   { path: "/settings/billing", label: "Billing",              icon: CreditCard      },

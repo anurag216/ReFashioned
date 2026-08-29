@@ -1431,6 +1431,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: Json
       }
+      get_organization_sustainability_report: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       get_pilot_import_batch: {
         Args: { p_batch_id: string }
         Returns: Json
