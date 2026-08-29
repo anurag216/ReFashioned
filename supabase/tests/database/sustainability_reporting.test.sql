@@ -13,7 +13,7 @@ INSERT INTO auth.users(id,instance_id,aud,role,email) VALUES
 INSERT INTO public.profiles(id,email) SELECT id,email FROM auth.users WHERE id::text LIKE 'b1000000%';
 INSERT INTO public.organizations(id,name,lifecycle_status) VALUES
  ('b2000000-0000-4000-8000-000000000001','Report tenant A','active'),('b2000000-0000-4000-8000-000000000002','Report tenant B','active'),
- ('b2000000-0000-4000-8000-000000000006','Suspended report tenant','suspended'),('b2000000-0000-4000-8000-000000000007','Deleting report tenant','deletion_requested'),('b2000000-0000-4000-8000-000000000008','Tombstoned report tenant','tombstoned');
+ ('b2000000-0000-4000-8000-000000000006','Suspended report tenant','active'),('b2000000-0000-4000-8000-000000000007','Deleting report tenant','active'),('b2000000-0000-4000-8000-000000000008','Tombstoned report tenant','active');
 INSERT INTO public.organization_members(id,organization_id,profile_id,role) VALUES
  ('b3000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000001','b1000000-0000-4000-8000-000000000001','admin'),
  ('b3000000-0000-4000-8000-000000000002','b2000000-0000-4000-8000-000000000001','b1000000-0000-4000-8000-000000000002','manager'),
@@ -22,6 +22,9 @@ INSERT INTO public.organization_members(id,organization_id,profile_id,role) VALU
  ('b3000000-0000-4000-8000-000000000006','b2000000-0000-4000-8000-000000000006','b1000000-0000-4000-8000-000000000006','admin'),
  ('b3000000-0000-4000-8000-000000000007','b2000000-0000-4000-8000-000000000007','b1000000-0000-4000-8000-000000000007','admin'),
  ('b3000000-0000-4000-8000-000000000008','b2000000-0000-4000-8000-000000000008','b1000000-0000-4000-8000-000000000008','admin');
+UPDATE public.organizations SET lifecycle_status='suspended' WHERE id='b2000000-0000-4000-8000-000000000006';
+UPDATE public.organizations SET lifecycle_status='deletion_requested' WHERE id='b2000000-0000-4000-8000-000000000007';
+UPDATE public.organizations SET lifecycle_status='tombstoned' WHERE id='b2000000-0000-4000-8000-000000000008';
 INSERT INTO public.suppliers(id,organization_id,name,status,contact_name) VALUES ('b6000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000001','A factual supplier','active','Private Contact'),('b6000000-0000-4000-8000-000000000002','b2000000-0000-4000-8000-000000000002','Secret tenant B supplier','active','Other Private Contact');
 INSERT INTO public.supplier_contacts(id,supplier_id,name,email) VALUES ('b6100000-0000-4000-8000-000000000005','b6000000-0000-4000-8000-000000000001','Supplier user','report-supplier@test.invalid');
 INSERT INTO public.supplier_access_memberships(id,organization_id,supplier_id,supplier_contact_id,profile_id,legacy_migrated) VALUES ('b6200000-0000-4000-8000-000000000005','b2000000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000001','b6100000-0000-4000-8000-000000000005','b1000000-0000-4000-8000-000000000005',true);
