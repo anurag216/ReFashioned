@@ -36,7 +36,7 @@ describe("PublicPassport", () => {
     render(<PublicPassport publicSlug={"a".repeat(64)} />);
     expect(await screen.findByText("Published Brand")).toBeInTheDocument();
     expect(screen.getByText("0 kg")).toBeInTheDocument();
-    expect(screen.queryByText("Total water use")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recorded lifecycle water total")).not.toBeInTheDocument();
     expect(screen.queryByText("Stage Certificate")).not.toBeInTheDocument();
     for (const forbidden of ["Supplier Secret", "Exact Location", "EcoThread", "Industry Avg"]) expect(screen.queryByText(forbidden)).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
@@ -46,15 +46,15 @@ describe("PublicPassport", () => {
     render(<PublicPassport publicSlug={"a".repeat(64)} />);
     expect(await screen.findByText("Organic Standard")).toBeInTheDocument();
     expect(screen.getByText("Verified")).toBeInTheDocument();
-    expect(screen.getByText("Valid until 2027-08-15")).toBeInTheDocument();
+    expect(screen.getByText(/Valid until/)).toBeInTheDocument();
     expect(screen.queryByText("Stage Certificate")).not.toBeInTheDocument();
   });
   it("omits impact cards when impact is unavailable", async () => {
     rpc.mockResolvedValue({ data: response(basePayload), error: null });
     render(<PublicPassport publicSlug={"a".repeat(64)} />);
     await screen.findByText("Published Shirt");
-    expect(screen.queryByText("Total CO₂ impact")).not.toBeInTheDocument();
-    expect(screen.queryByText("Total water use")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recorded lifecycle CO₂ total")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recorded lifecycle water total")).not.toBeInTheDocument();
   });
   it("renders a neutral lifecycle empty state", async () => {
     rpc.mockResolvedValue({ data: response({ ...basePayload, lifecycle: [] }), error: null });

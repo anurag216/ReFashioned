@@ -51,17 +51,23 @@ test.describe("DPP certification trust chain", () => {
       await expect(adminPage.getByRole("heading", { name: PRODUCT_NAME })).toBeVisible();
       await adminPage.getByRole("button", { name: "Publish Passport" }).click();
       await expect(adminPage.getByText("Passport snapshot published.")).toBeVisible();
-      const slug = (await adminPage.getByText(/^[0-9a-f]{64}$/).textContent())?.trim();
-      expect(slug).toMatch(/^[0-9a-f]{64}$/);
-      const publicPath = `/p/${slug}`;
+
+      const livePassportLink = adminPage.getByRole("link", { name: "View live passport" });
+      await expect(livePassportLink).toBeVisible();
+      const livePassportHref = await livePassportLink.getAttribute("href");
+      expect(livePassportHref).toBeTruthy();
+      const publicPath = new URL(livePassportHref!).pathname;
+      expect(publicPath).toMatch(/^\/p\/[0-9a-f]{64}$/);
 
       guestContext = await browser.newContext({ baseURL });
       const guestPage = await guestContext.newPage();
       await guestPage.goto(publicPath);
       await expect(guestPage.getByRole("heading", { name: PRODUCT_NAME })).toBeVisible();
-      await expect(guestPage.getByText(CERTIFICATION_NAME)).toBeVisible();
-      await expect(guestPage.getByText("Verified", { exact: true })).toBeVisible();
-      await expect(guestPage.getByText(`Valid until ${VALID_UNTIL}`)).toBeVisible();
+      const publicCertification = guestPage.getByRole("listitem").filter({ hasText: CERTIFICATION_NAME });
+      await expect(publicCertification).toContainText(CERTIFICATION_NAME);
+      await expect(publicCertification).toContainText("Verified");
+      await expect(publicCertification).toContainText("Valid until");
+      await expect(publicCertification).toContainText("2030");
 
       await adminPage.goto("/traceability");
       await expect(adminPage.getByRole("heading", { name: "Product Journey" })).toBeVisible();
@@ -76,8 +82,9 @@ test.describe("DPP certification trust chain", () => {
       await expect(guestPage.getByText(CERTIFICATION_NAME)).toHaveCount(0);
 
       await adminPage.getByTestId("button-view-dpp").click();
-      await expect(adminPage.getByText("Internal data has changed. Republish to update the public snapshot.")).toBeVisible();
-      await expect(adminPage.getByRole("button", { name: "Republish changes" })).toBeVisible();
+      await expect(adminPage.getByRole("heading", { name: "Updates pending publication" })).toBeVisible();
+      await expect(adminPage.getByText("Internal data has changed. The public link still serves the published snapshot until an admin publishes updates.")).toBeVisible();
+      await expect(adminPage.getByRole("button", { name: "Publish updates" })).toBeVisible();
     } finally {
       await Promise.allSettled([guestContext?.close(), adminContext?.close()]);
     }

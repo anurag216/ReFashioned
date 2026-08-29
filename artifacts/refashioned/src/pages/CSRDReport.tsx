@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { AlertTriangle, Download, FileCheck2, Leaf } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { recorded, reportStatus, type SustainabilityReport } from "../lib/reports/csrdMetrics";
@@ -23,7 +24,7 @@ export function CSRDReport() {
       <Metric label="Products" value={String(report.tracked_product_count)} detail={`${report.products_ready_count} with no current readiness blockers`}/>
       <Metric label="Materials" value={report.tracked_product_count ? `${report.material_complete_product_count} of ${report.tracked_product_count}`:"Not recorded"} detail="Products with complete material composition"/>
       <Metric label="Supply chain" value={report.tracked_product_count ? `${report.supply_chain_complete_product_count} of ${report.tracked_product_count}`:"Not recorded"} detail={`${report.supplier_count} recorded supplier${report.supplier_count===1?"":"s"}`}/>
-      <Metric label="DPP" value={report.published_dpp_count ? String(report.published_dpp_count):"Not recorded"} detail={`${report.dpps_needing_republish} needing republish`}/>
+      <Metric label="DPP" value={String(report.published_dpp_count)} detail={`${report.dpps_needing_republish} needing republish`}/>
     </div></section>
 
     <section><h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><Leaf className="h-5 w-5"/>Recorded environmental data</h2><div className="grid gap-3 md:grid-cols-2">
@@ -34,10 +35,10 @@ export function CSRDReport() {
     </div><p className="mt-3 text-sm text-muted-foreground">Lifecycle observations are recorded product-stage values. Their partial sums are not a complete corporate GHG or water inventory.</p></section>
 
     <section><h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><FileCheck2 className="h-5 w-5"/>Evidence and certification status</h2><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      <Metric label="Trusted evidence" value={noEvidence?"Not recorded":String(report.trusted_evidence_count)} detail="Approved, clean and fingerprinted"/><Metric label="Pending" value={noEvidence?"Not recorded":String(report.pending_evidence_count)}/><Metric label="Quarantined" value={noEvidence?"Not recorded":String(report.quarantined_evidence_count)}/><Metric label="Rejected" value={noEvidence?"Not recorded":String(report.rejected_evidence_count)}/><Metric label="Valid certifications" value={report.valid_certification_count?String(report.valid_certification_count):"Not recorded"} detail="Current and backed by trusted evidence"/>
+      <Metric label="Trusted evidence" value={noEvidence?"Not recorded":String(report.trusted_evidence_count)} detail="Approved, clean and fingerprinted"/><Metric label="Pending" value={noEvidence?"Not recorded":String(report.pending_evidence_count)}/><Metric label="Quarantined" value={noEvidence?"Not recorded":String(report.quarantined_evidence_count)}/><Metric label="Rejected" value={noEvidence?"Not recorded":String(report.rejected_evidence_count)}/><Metric label="Valid certifications" value={String(report.valid_certification_count)} detail="Current and backed by trusted evidence"/>
     </div></section>
 
-    <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 break-inside-avoid"><h2 className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-5 w-5"/>Data gaps and actions</h2><p className="mt-2 text-sm">{report.readiness_blocker_count ? `${report.readiness_blocker_count} factual readiness action${report.readiness_blocker_count===1?"":"s"} remain. Open the Action Center or a Product Workspace to resolve them.`:"No current product-readiness blockers are recorded."}</p></section>
+    <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 break-inside-avoid"><h2 className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-5 w-5"/>Data gaps and actions</h2><p className="mt-2 text-sm">{report.readiness_blocker_count ? `${report.readiness_blocker_count} factual readiness action${report.readiness_blocker_count===1?"":"s"} remain. Open the Action Center or a Product Workspace to resolve them.`:"No current product-readiness blockers are recorded."}</p>{report.readiness_blocker_count > 0 && <div className="no-print mt-4 flex gap-3"><Link href="/?page=dashboard" className="rounded bg-primary px-4 py-2 text-sm text-primary-foreground">Open Action Center</Link><Link href="/?page=products" className="rounded border bg-white px-4 py-2 text-sm">Open Product Catalog</Link></div>}</section>
     <section className="rounded-xl border p-5 break-inside-avoid"><h2 className="font-semibold">Methodology and limitations</h2><ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground"><li>Generated only from data currently stored for this organization in Re:Fashioned.</li><li>Missing values are not estimated and are not treated as zero, compliant or verified.</li><li>Trusted evidence requires approved status, a clean scan and an immutable content fingerprint. Valid certifications must also be current and evidence-backed.</li><li>This is operational data readiness, not legal advice, assurance, certification, or a determination of CSRD compliance.</li></ul></section>
   </main>;
 }
