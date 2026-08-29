@@ -47,7 +47,13 @@ test("internal team invitation, role changes, and same-session revocation", asyn
   await member.getByRole("button", { name: "Accept invitation" }).click();
   await member.waitForURL("**/dashboard");
 
-  await member.goto("/products");
+  // Wait for the authenticated shell to settle after invite acceptance and use
+  // the same client-side navigation path a real member uses. Starting a second
+  // top-level page.goto here can race the invite page's final dashboard redirect.
+  const productsLink = member.getByRole("link", { name: "Products", exact: true });
+  await expect(productsLink).toBeVisible();
+  await productsLink.click();
+  await member.waitForURL("**/products");
   await expect(member.getByText("Tenant A Product", { exact: true })).toBeVisible();
   await expect(member.getByRole("button", { name: /create product/i })).toBeVisible();
 
