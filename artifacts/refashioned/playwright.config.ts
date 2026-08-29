@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL;
+const pilotReporter = ["./scripts/e2e/pilot-acceptance-reporter.mjs"] as const;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -8,7 +9,9 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : [["list"]],
+  reporter: process.env.CI
+    ? [["list"], ["html", { open: "never" }], pilotReporter]
+    : [["list"], pilotReporter],
   use: {
     baseURL,
     trace: process.env.CI ? "retain-on-failure" : "on-first-retry",
