@@ -11,7 +11,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   retries: 0,
-  reporter: [["list"]],
+  reporter: [["list"], [path.resolve(appDir, "scripts/e2e/pilot-acceptance-reporter.mjs")]],
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL,
     trace: "on-first-retry",

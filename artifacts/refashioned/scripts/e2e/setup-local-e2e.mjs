@@ -48,6 +48,33 @@ const READINESS_SUPPLIER_ID = "e2e40000-0000-4000-8000-000000000004";
 const READINESS_STAGE_ID = "e2e50000-0000-4000-8000-000000000004";
 const READINESS_EVIDENCE_ID = "e2e60000-0000-4000-8000-000000000004";
 
+// Canonical paying-pilot data. These IDs and addresses are deliberately
+// recognizable as test-only data; nothing in the runtime application imports
+// this script. Keep the pilot fixture additive so the focused security tests
+// above can continue to own and mutate their isolated records.
+const PILOT_ORGANIZATION_ID = "a1100000-0000-4000-8000-000000000001";
+const PILOT_CROSS_TENANT_ID = "a1100000-0000-4000-8000-000000000002";
+const PILOT_USERS = [
+  { id: "a1110000-0000-4000-8000-000000000001", email: "admin@maison-verde.test.invalid", role: "admin", organization_id: PILOT_ORGANIZATION_ID },
+  { id: "a1110000-0000-4000-8000-000000000002", email: "manager@maison-verde.test.invalid", role: "manager", organization_id: PILOT_ORGANIZATION_ID },
+  { id: "a1110000-0000-4000-8000-000000000003", email: "viewer@maison-verde.test.invalid", role: "viewer", organization_id: PILOT_ORGANIZATION_ID },
+  { id: "a1110000-0000-4000-8000-000000000004", email: "supplier-cotton@maison-verde.test.invalid" },
+  { id: "a1110000-0000-4000-8000-000000000005", email: "supplier-maker@maison-verde.test.invalid" },
+  { id: "a1110000-0000-4000-8000-000000000006", email: "unrelated@cross-tenant.test.invalid", role: "viewer", organization_id: PILOT_CROSS_TENANT_ID },
+  { id: "a1110000-0000-4000-8000-000000000007", email: "onboarding@maison-verde.test.invalid" },
+];
+const PILOT_PRODUCTS = [
+  { id: "a1130000-0000-4000-8000-000000000001", organization_id: PILOT_ORGANIZATION_ID, name: "Organic Cotton Overshirt [TEST]", sku: "MV-TEST-OC-001", season: "SS26", status: "draft" },
+  { id: "a1130000-0000-4000-8000-000000000002", organization_id: PILOT_ORGANIZATION_ID, name: "Recycled Wool Coat [TEST]", sku: "MV-TEST-RW-002", season: "AW26", status: "draft" },
+  { id: "a1130000-0000-4000-8000-000000000003", organization_id: PILOT_ORGANIZATION_ID, name: "Linen Summer Shirt [TEST]", sku: "MV-TEST-LS-003", season: "SS26", status: "draft" },
+];
+const PILOT_SUPPLIERS = [
+  { id: "a1140000-0000-4000-8000-000000000001", organization_id: PILOT_ORGANIZATION_ID, name: "Fictional Test Cotton Cooperative", location: "Test Region, India", tier: 2, status: "active", contact_name: "Test Cotton Contact" },
+  { id: "a1140000-0000-4000-8000-000000000002", organization_id: PILOT_ORGANIZATION_ID, name: "Fictional Test Recycled Wool Mill", location: "Test Region, Italy", tier: 2, status: "active", contact_name: "Test Wool Contact" },
+  { id: "a1140000-0000-4000-8000-000000000003", organization_id: PILOT_ORGANIZATION_ID, name: "Fictional Test Low-Impact Dyehouse", location: "Test Region, Portugal", tier: 1, status: "active", contact_name: "Test Dye Contact" },
+  { id: "a1140000-0000-4000-8000-000000000004", organization_id: PILOT_ORGANIZATION_ID, name: "Fictional Test Garment Workshop", location: "Test Region, Portugal", tier: 1, status: "active", contact_name: "Test Maker Contact" },
+];
+
 function assertOk(error, operation) {
   if (error) throw new Error(`${operation}: ${error.message}`);
 }
@@ -55,7 +82,7 @@ function assertOk(error, operation) {
 const { data: listed, error: listError } = await client.auth.admin.listUsers({ page: 1, perPage: 1000 });
 assertOk(listError, "list local auth users");
 
-for (const fixture of [...USERS, SUPPLIER_USER, TEAM_MEMBER_USER]) {
+for (const fixture of [...USERS, SUPPLIER_USER, TEAM_MEMBER_USER, ...PILOT_USERS]) {
   const existing = listed.users.find(user => user.email === fixture.email);
   if (existing) {
     const { error } = await client.auth.admin.updateUserById(existing.id, { password: E2E_PASSWORD, email_confirm: true });
@@ -105,6 +132,46 @@ assertOk((await client.from("organization_members").upsert(USERS.map((user, inde
   organization_id: user.organization_id,
   role: user.role,
 })), { onConflict: "organization_id,profile_id" })).error, "upsert memberships");
+
+assertOk((await client.from("organizations").upsert([
+  { id: PILOT_ORGANIZATION_ID, name: "Maison Verde Test Pilot", plan: "starter" },
+  { id: PILOT_CROSS_TENANT_ID, name: "Unrelated Cross-Tenant Test Organization", plan: "starter" },
+])).error, "upsert paying-pilot organizations");
+assertOk((await client.from("profiles").upsert(PILOT_USERS.map(user => ({
+  id: user.id,
+  email: user.email,
+  full_name: `Maison Verde fixture ${user.email.split("@")[0]}`,
+  role: user.role === "manager" ? "sustainability_manager" : "brand_admin",
+})))).error, "upsert paying-pilot profiles");
+const pilotInternalUsers = PILOT_USERS.filter(user => user.organization_id);
+assertOk((await client.from("organization_members").upsert(pilotInternalUsers.map((user, index) => ({
+  id: `a1120000-0000-4000-8000-00000000000${index + 1}`,
+  profile_id: user.id,
+  organization_id: user.organization_id,
+  role: user.role,
+})), { onConflict: "organization_id,profile_id" })).error, "upsert paying-pilot memberships");
+assertOk((await client.from("organization_members").delete().eq("profile_id", PILOT_USERS[6].id)).error, "reset paying-pilot onboarding membership");
+
+assertOk((await client.from("products").upsert(PILOT_PRODUCTS)).error, "upsert paying-pilot products");
+assertOk((await client.from("suppliers").upsert(PILOT_SUPPLIERS)).error, "upsert paying-pilot suppliers");
+assertOk((await client.from("product_materials").delete().in("product_id", PILOT_PRODUCTS.map(product => product.id))).error, "reset paying-pilot materials");
+assertOk((await client.from("product_materials").insert([
+  { product_id: PILOT_PRODUCTS[0].id, material_name: "Organic cotton [TEST]", composition_percentage: 100, certification_required: true },
+  { product_id: PILOT_PRODUCTS[1].id, material_name: "Recycled wool [TEST]", composition_percentage: 80, certification_required: true },
+  { product_id: PILOT_PRODUCTS[1].id, material_name: "Recycled polyamide [TEST]", composition_percentage: 20, certification_required: false },
+  { product_id: PILOT_PRODUCTS[2].id, material_name: "European linen [TEST]", composition_percentage: 70, certification_required: true },
+])).error, "insert paying-pilot materials");
+assertOk((await client.from("lifecycle_stages").delete().in("product_id", PILOT_PRODUCTS.map(product => product.id))).error, "reset paying-pilot lifecycle stages");
+assertOk((await client.from("lifecycle_stages").insert([
+  { id: "a1150000-0000-4000-8000-000000000001", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[0].id, supplier_id: PILOT_SUPPLIERS[0].id, stage_name: "Test cotton cultivation", stage_order: 1, co2_impact_kg: 1.2, water_usage_l: 110, flagged: false },
+  { id: "a1150000-0000-4000-8000-000000000002", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[0].id, supplier_id: PILOT_SUPPLIERS[2].id, stage_name: "Test yarn dyeing", stage_order: 2, co2_impact_kg: null, water_usage_l: 45, flagged: false },
+  { id: "a1150000-0000-4000-8000-000000000003", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[0].id, supplier_id: PILOT_SUPPLIERS[3].id, stage_name: "Test overshirt assembly", stage_order: 3, co2_impact_kg: 0.8, water_usage_l: null, flagged: false },
+  { id: "a1150000-0000-4000-8000-000000000004", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[1].id, supplier_id: PILOT_SUPPLIERS[1].id, stage_name: "Test wool recycling", stage_order: 1, co2_impact_kg: 2.4, water_usage_l: 30, flagged: false },
+  { id: "a1150000-0000-4000-8000-000000000005", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[1].id, supplier_id: PILOT_SUPPLIERS[2].id, stage_name: "Test coat finishing", stage_order: 2, co2_impact_kg: null, water_usage_l: null, flagged: true },
+  { id: "a1150000-0000-4000-8000-000000000006", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[1].id, supplier_id: PILOT_SUPPLIERS[3].id, stage_name: "Test coat assembly", stage_order: 3, co2_impact_kg: 1.7, water_usage_l: 8, flagged: false },
+  { id: "a1150000-0000-4000-8000-000000000007", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[2].id, supplier_id: PILOT_SUPPLIERS[0].id, stage_name: "Test linen sourcing", stage_order: 1, co2_impact_kg: null, water_usage_l: null, flagged: true },
+  { id: "a1150000-0000-4000-8000-000000000008", organization_id: PILOT_ORGANIZATION_ID, product_id: PILOT_PRODUCTS[2].id, supplier_id: PILOT_SUPPLIERS[3].id, stage_name: "Test shirt assembly", stage_order: 2, co2_impact_kg: 0.6, water_usage_l: null, flagged: false },
+])).error, "insert paying-pilot lifecycle stages");
 
 // This dedicated identity starts authenticated but unauthorized. The browser
 // lifecycle must create its membership by redeeming a real team invitation.
