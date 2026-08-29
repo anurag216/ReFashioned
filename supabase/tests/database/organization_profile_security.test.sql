@@ -5,17 +5,29 @@ INSERT INTO auth.users(id,instance_id,aud,role,email) VALUES
 ('91000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-admin@test.invalid'),
 ('91000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-manager@test.invalid'),
 ('91000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-viewer@test.invalid'),
-('91000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-supplier@test.invalid');
+('91000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-supplier@test.invalid'),
+('91000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-suspended-admin@test.invalid'),
+('91000000-0000-0000-0000-000000000006','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-deleting-admin@test.invalid'),
+('91000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000000','authenticated','authenticated','profile-tombstoned-admin@test.invalid');
 INSERT INTO public.profiles(id,email) SELECT id,email FROM auth.users WHERE email LIKE 'profile-%';
+
+-- Create tenants and memberships while every tenant is active. Production
+-- authorization deliberately blocks adding/moving memberships into inactive tenants.
 INSERT INTO public.organizations(id,name,lifecycle_status) VALUES
 ('92000000-0000-0000-0000-000000000001','Active profile tenant','active'),
-('92000000-0000-0000-0000-000000000002','Suspended profile tenant','suspended'),
-('92000000-0000-0000-0000-000000000003','Deleting profile tenant','deletion_requested'),
-('92000000-0000-0000-0000-000000000004','Tombstoned profile tenant','tombstoned');
+('92000000-0000-0000-0000-000000000002','Suspended profile tenant','active'),
+('92000000-0000-0000-0000-000000000003','Deleting profile tenant','active'),
+('92000000-0000-0000-0000-000000000004','Tombstoned profile tenant','active');
 INSERT INTO public.organization_members(organization_id,profile_id,role) VALUES
 ('92000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','admin'),
 ('92000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000002','manager'),
-('92000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000003','viewer');
+('92000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000003','viewer'),
+('92000000-0000-0000-0000-000000000002','91000000-0000-0000-0000-000000000005','admin'),
+('92000000-0000-0000-0000-000000000003','91000000-0000-0000-0000-000000000006','admin'),
+('92000000-0000-0000-0000-000000000004','91000000-0000-0000-0000-000000000007','admin');
+UPDATE public.organizations SET lifecycle_status='suspended' WHERE id='92000000-0000-0000-0000-000000000002';
+UPDATE public.organizations SET lifecycle_status='deletion_requested' WHERE id='92000000-0000-0000-0000-000000000003';
+UPDATE public.organizations SET lifecycle_status='tombstoned' WHERE id='92000000-0000-0000-0000-000000000004';
 
 SELECT set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
 SELECT lives_ok($$SELECT public.update_organization_profile('  Pilot truth  ')$$,'admin updates own active organization');
@@ -34,14 +46,13 @@ SELECT set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000004'
 SELECT throws_ok($$SELECT public.update_organization_profile('Supplier')$$,'42501','active organization administrator required','supplier-only denied'); RESET ROLE;
 SET LOCAL ROLE anon; SELECT throws_ok($$SELECT public.update_organization_profile('Anon')$$,'42501',NULL,'anonymous denied'); RESET ROLE;
 
--- Re-home the admin fixture to prove every non-active lifecycle is denied.
-UPDATE public.organization_members SET organization_id='92000000-0000-0000-0000-000000000002' WHERE profile_id='91000000-0000-0000-0000-000000000001';
-SELECT set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000005',true); SET LOCAL ROLE authenticated;
 SELECT throws_ok($$SELECT public.update_organization_profile('No')$$,'42501','active organization administrator required','suspended denied'); RESET ROLE;
-UPDATE public.organization_members SET organization_id='92000000-0000-0000-0000-000000000003' WHERE profile_id='91000000-0000-0000-0000-000000000001';
-SET LOCAL ROLE authenticated; SELECT throws_ok($$SELECT public.update_organization_profile('No')$$,'42501','active organization administrator required','deletion requested denied'); RESET ROLE;
-UPDATE public.organization_members SET organization_id='92000000-0000-0000-0000-000000000004' WHERE profile_id='91000000-0000-0000-0000-000000000001';
-SET LOCAL ROLE authenticated; SELECT throws_ok($$SELECT public.update_organization_profile('No')$$,'42501','active organization administrator required','tombstoned denied'); RESET ROLE;
-SELECT is((SELECT name FROM public.organizations WHERE id='92000000-0000-0000-0000-000000000002'),'Suspended profile tenant','other tenant cannot be targeted');
+SELECT set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000006',true); SET LOCAL ROLE authenticated;
+SELECT throws_ok($$SELECT public.update_organization_profile('No')$$,'42501','active organization administrator required','deletion requested denied'); RESET ROLE;
+SELECT set_config('request.jwt.claim.sub','91000000-0000-0000-0000-000000000007',true); SET LOCAL ROLE authenticated;
+SELECT throws_ok($$SELECT public.update_organization_profile('No')$$,'42501','active organization administrator required','tombstoned denied'); RESET ROLE;
+
+SELECT is((SELECT name FROM public.organizations WHERE id='92000000-0000-0000-0000-000000000002'),'Suspended profile tenant','active admin cannot target another tenant');
 SELECT ok(NOT has_table_privilege('authenticated','public.organizations','UPDATE'),'authenticated organization update privilege revoked');
 SELECT * FROM finish(); ROLLBACK;
