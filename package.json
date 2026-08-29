@@ -12,14 +12,14 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "test": "pnpm run test:security && pnpm --dir artifacts/refashioned test",
-    "test:security": "node --test scripts/secret-scanner.test.mjs scripts/deployment-config.test.mjs",
+    "test:security": "node --test scripts/secret-scanner.test.mjs scripts/deployment-config.test.mjs scripts/evidence-scanner.test.mjs",
     "security:secrets": "node scripts/check-tracked-secrets.mjs",
     "test:watch": "pnpm --dir artifacts/refashioned test:watch",
     "test:ui": "pnpm --dir artifacts/refashioned test:ui",
     "test:e2e": "pnpm --dir artifacts/refashioned exec playwright test",
     "test:live-smoke": "pnpm --dir artifacts/refashioned exec playwright test --config=playwright.live.config.ts",
     "e2e": "pnpm --dir artifacts/refashioned exec playwright test",
-    "e2e:headed": "pnpm --dir artifacts/refashioned exec playwright test --headed"
+    "e2e:headed": "pnpm --dir artifacts/refashioned exec playwright test"
   },
   "private": true,
   "devDependencies": {
