@@ -76,10 +76,10 @@ SELECT is((public.get_organization_sustainability_report()->>'pending_evidence_c
 SELECT is((public.get_organization_sustainability_report()->>'rejected_evidence_count')::int,1,'rejected evidence is not trusted');
 INSERT INTO public.certifications(id,organization_id,supplier_id,evidence_id,name,expiry_date,verification_status,created_by) VALUES ('b9000000-0000-4000-8000-000000000001','b2000000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000001','b8000000-0000-4000-8000-000000000001','Current fact',current_date+30,'verified','b1000000-0000-4000-8000-000000000001');
 SELECT is((public.get_organization_sustainability_report()->>'valid_certification_count')::int,1,'current evidence-backed certification counts');
-INSERT INTO public.certifications(id,organization_id,supplier_id,evidence_id,name,expiry_date,verification_status,created_by) VALUES ('b9000000-0000-4000-8000-000000000002','b2000000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000001','b8000000-0000-4000-8000-000000000001','Expired fact',current_date-1,'verified','b1000000-0000-4000-8000-000000000001');
-SELECT is((public.get_organization_sustainability_report()->>'valid_certification_count')::int,1,'expired certification is not represented as valid');
 UPDATE public.certifications SET verification_status='revoked',revoked_at=now(),revoked_by='b1000000-0000-4000-8000-000000000001' WHERE id='b9000000-0000-4000-8000-000000000001';
 SELECT is((public.get_organization_sustainability_report()->>'valid_certification_count')::int,0,'revoked certification is not valid');
+INSERT INTO public.certifications(id,organization_id,supplier_id,evidence_id,name,expiry_date,verification_status,created_by) VALUES ('b9000000-0000-4000-8000-000000000002','b2000000-0000-4000-8000-000000000001','b6000000-0000-4000-8000-000000000001','b8000000-0000-4000-8000-000000000001','Expired fact',current_date-1,'verified','b1000000-0000-4000-8000-000000000001');
+SELECT is((public.get_organization_sustainability_report()->>'valid_certification_count')::int,0,'expired certification is not represented as valid');
 SELECT is((public.get_organization_sustainability_report()->>'trusted_evidence_count')::int,1,'untrusted evidence states never inflate the trusted count');
 SELECT * FROM finish();
 ROLLBACK;
