@@ -67,6 +67,16 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+@media print {
+  @page { margin: 14mm; }
+  body { background: white !important; color: black !important; }
+  body > div > div > aside, body > div > div > header, .no-print { display: none !important; }
+  .report-print { max-width: none !important; padding: 0 !important; }
+  .report-print section { page-break-inside: avoid; }
+  .break-inside-avoid { break-inside: avoid; }
+  .print-brand { color: #12382b !important; }
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
