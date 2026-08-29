@@ -1439,6 +1439,10 @@ export type Database = {
         Args: { p_batch_id: string }
         Returns: Json
       }
+      get_product_passport_preview: {
+        Args: { p_product_id: string }
+        Returns: Json
+      }
       get_product_passport_publication_state: {
         Args: { p_product_id: string }
         Returns: {

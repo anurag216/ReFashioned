@@ -8,6 +8,7 @@ vi.mock("../../lib/auth/usePermissions", () => ({ usePermissions: () => ({ isAdm
 vi.mock("../../lib/supabaseClient", () => ({ supabase: { rpc: mocks.rpc, from: mocks.from } }));
 
 const slug = "a".repeat(64);
+const preview = { schema_version: 2 as const, brand: { name: "Published Brand" }, product: { name: "Real Product", identifier: "REAL" }, materials: [], impact: {}, lifecycle: [], certifications: [] };
 const state = (changes = false, published = false) => [{ public_slug: slug, is_published: published, published_at: published ? "2026-08-08" : null, payload_generated_at: "2026-08-08", stored_payload_hash: "x", current_payload_hash: changes ? "y" : "x", has_unpublished_changes: changes }];
 function setupData(changes = false, published = false) {
   mocks.from.mockImplementation((table: string) => {
@@ -17,9 +18,11 @@ function setupData(changes = false, published = false) {
     chain.order.mockResolvedValue({ data: [] }); return chain;
   });
   mocks.rpc.mockImplementation(async (name: string) => {
+    if (name === "get_product_passport_preview") return { data: preview, error: null };
     if (name === "get_product_passport_publication_state") return { data: state(changes, published), error: null };
     if (name === "publish_product_passport") return { data: [{ public_slug: slug }], error: null };
     if (name === "rotate_product_passport_slug") return { data: "b".repeat(64), error: null };
+    if (name === "get_public_product_passport") return { data: { schema_version: 2, published_at: "2026-08-08", payload_generated_at: "2026-08-08", payload: preview }, error: null };
     return { data: null, error: null };
   });
 }
@@ -29,7 +32,7 @@ describe("DigitalProductPassport publication controls", () => {
   it("shows controls only to admins and renders the real lifecycle empty state", async () => {
     const { unmount } = render(<DigitalProductPassport onBack={vi.fn()} />);
     expect(await screen.findByText("Publish Passport")).toBeInTheDocument();
-    expect(screen.getByText("No lifecycle data has been recorded for this product.")).toBeInTheDocument();
+    expect(screen.getByText("Not publicly available")).toBeInTheDocument();
     expect(screen.queryByText("EcoFibers Cooperative Ltd.")).not.toBeInTheDocument(); unmount();
     mocks.role = "manager"; setupData(); render(<DigitalProductPassport onBack={vi.fn()} />);
     await screen.findByText("Real Product"); expect(screen.queryByText("Publish Passport")).not.toBeInTheDocument();
@@ -41,12 +44,12 @@ describe("DigitalProductPassport publication controls", () => {
   });
   it("uses RPC dirty state to emphasize republishing", async () => {
     vi.clearAllMocks(); setupData(true, true); render(<DigitalProductPassport onBack={vi.fn()} />);
-    expect(await screen.findByText("Internal data has changed. Republish to update the public snapshot.")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Republish changes")); await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("publish_product_passport", expect.anything()));
+    expect(await screen.findByText("Internal data has changed. The public link still serves the published snapshot until an admin publishes updates.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Publish updates")); await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith("publish_product_passport", expect.anything()));
   });
   it("shares the returned slug and never the product UUID", async () => {
     vi.clearAllMocks(); setupData(false, true); render(<DigitalProductPassport onBack={vi.fn()} />);
-    fireEvent.click(await screen.findByText("Share"));
+    fireEvent.click(await screen.findByText("Show QR code"));
     expect(await screen.findByText(new RegExp(`/p/${slug}`))).toBeInTheDocument();
     expect(screen.queryByText(/\/p\/93000000-/)).not.toBeInTheDocument();
   });

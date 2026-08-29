@@ -32,10 +32,10 @@ describe("public DPP data boundary", () => {
     for (const claim of ["EcoThread", "Industry Avg", "certificate_url", "Supplier", "Location", "ESPR Regulation", "Every component's lifecycle"]) expect(publicSource).not.toContain(claim);
   });
   it("uses publication RPCs and a slug-based share URL internally", () => {
-    expect(internalSource).toContain('rpc("publish_product_passport"');
-    expect(internalSource).toContain('rpc("unpublish_product_passport"');
-    expect(internalSource).toContain('rpc("rotate_product_passport_slug"');
+    expect(internalSource).toContain('"publish_product_passport" | "unpublish_product_passport" | "rotate_product_passport_slug"');
+    expect(internalSource).toContain('supabase.rpc(name, { p_product_id: productId })');
+    expect(internalSource).toContain('rpc("get_product_passport_preview"');
     expect(internalSource).toContain("/p/${publication.public_slug}");
-    expect(internalSource).toContain("No lifecycle data has been recorded for this product.");
+    expect(internalSource).toContain("Current draft · not public until published");
   });
 });

@@ -1,20 +1,8 @@
 import { useEffect, useState } from "react";
-import { Grid, PackageSearch, ShieldCheck } from "lucide-react";
+import { Grid, PackageSearch } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-
-interface PublicCertification { name: string; valid_until?: string | null }
-interface PublicLifecycleStage { order: number | null; name: string; summary?: string; co2_kg?: number | null; water_l?: number | null; certifications: PublicCertification[] }
-interface PublicPassportPayloadBase {
-  brand: { name: string };
-  product: { name: string; identifier?: string; season?: string };
-  materials: Array<{ name: string; percentage: number | null }>;
-  impact?: { total_co2_kg?: number; total_water_l?: number };
-  lifecycle: PublicLifecycleStage[];
-}
-interface PublicPassportPayloadV1 extends PublicPassportPayloadBase { schema_version: 1 }
-interface PublicPassportPayloadV2 extends PublicPassportPayloadBase { schema_version: 2; certifications: PublicCertification[] }
-type PublicPassportPayload = PublicPassportPayloadV1 | PublicPassportPayloadV2;
-interface PublicPassportResponse { schema_version: 1 | 2; published_at: string; payload_generated_at: string; payload: PublicPassportPayload }
+import { PassportView } from "../components/passport/PassportView";
+import type { PublicPassportResponse } from "../lib/passport";
 
 function Unavailable() {
   return <main className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 text-center"><section className="bg-white rounded-2xl border p-10 max-w-md">
@@ -40,23 +28,8 @@ export function PublicPassport({ publicSlug }: { publicSlug: string }) {
   }, [publicSlug]);
   if (loading) return <main className="min-h-screen bg-[#12382B] flex items-center justify-center text-white">Loading passport…</main>;
   if (!passport?.payload || passport.schema_version !== passport.payload.schema_version || ![1, 2].includes(passport.schema_version)) return <Unavailable />;
-  const { payload } = passport;
-  const certifications = payload.schema_version === 2 ? payload.certifications : [];
   return <div className="min-h-screen bg-[#F8FAFC]">
     <header className="bg-white border-b"><div className="max-w-5xl mx-auto px-6 h-14 flex items-center gap-2"><Grid className="w-4 h-4"/><span className="font-semibold">RE:Fashioned</span></div></header>
-    <section className="bg-[#12382B] text-white"><div className="max-w-5xl mx-auto px-6 py-12">
-      <p className="text-sm text-[#6AE096] mb-2">{payload.brand.name}</p><h1 className="text-4xl font-bold">{payload.product.name}</h1>
-      {(payload.product.identifier || payload.product.season) && <p className="text-white/70 mt-3">{[payload.product.identifier, payload.product.season].filter(Boolean).join(" · ")}</p>}
-    </div></section>
-    <main className="max-w-5xl mx-auto px-6 py-10 space-y-8">
-      {(payload.impact?.total_co2_kg != null || payload.impact?.total_water_l != null) && <section className="grid sm:grid-cols-2 gap-4">
-        {payload.impact?.total_co2_kg != null && <article className="bg-white border rounded-xl p-5"><p className="text-sm text-muted-foreground">Total CO₂ impact</p><p className="text-2xl font-semibold">{payload.impact?.total_co2_kg} kg</p></article>}
-        {payload.impact?.total_water_l != null && <article className="bg-white border rounded-xl p-5"><p className="text-sm text-muted-foreground">Total water use</p><p className="text-2xl font-semibold">{payload.impact?.total_water_l.toLocaleString()} L</p></article>}
-      </section>}
-      {payload.materials.length > 0 && <section className="bg-white border rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Materials</h2><ul className="space-y-2">{payload.materials.map((m,i)=><li key={`${m.name}-${i}`} className="flex justify-between"><span>{m.name}</span>{m.percentage != null && <span>{m.percentage}%</span>}</li>)}</ul></section>}
-      <section className="bg-white border rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Lifecycle</h2>{payload.lifecycle.length === 0 ? <p className="text-sm text-muted-foreground">Not publicly available</p> : <ol className="space-y-5">{payload.lifecycle.map((stage,i)=><li key={`${stage.order}-${stage.name}-${i}`} className="border-l-2 border-primary pl-4"><h3 className="font-medium">{stage.name}</h3>{stage.summary && <p className="text-sm text-muted-foreground mt-1">{stage.summary}</p>}<div className="text-sm mt-2 flex gap-4">{stage.co2_kg != null && <span>{stage.co2_kg} kg CO₂</span>}{stage.water_l != null && <span>{stage.water_l.toLocaleString()} L water</span>}</div></li>)}</ol>}</section>
-      {certifications.length > 0 && <section className="bg-white border rounded-xl p-6"><h2 className="text-lg font-semibold mb-4">Certifications</h2><ul className="space-y-3">{certifications.map((cert,i)=><li key={`${cert.name}-${i}`} className="flex flex-wrap items-center gap-2"><ShieldCheck className="w-4 h-4 text-green-600"/><span>{cert.name}</span><span className="text-xs font-medium text-green-700">Verified</span>{cert.valid_until && <span className="text-xs text-muted-foreground">Valid until {cert.valid_until}</span>}</li>)}</ul></section>}
-      <footer className="text-center text-xs text-muted-foreground">Powered by RE:Fashioned</footer>
-    </main>
+    <main className="mx-auto max-w-5xl px-3 py-6 sm:px-6 sm:py-10"><PassportView payload={passport.payload} publishedAt={passport.published_at} generatedAt={passport.payload_generated_at}/></main>
   </div>;
 }
