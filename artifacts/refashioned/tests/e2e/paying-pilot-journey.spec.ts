@@ -21,7 +21,7 @@ test("[pilot:onboarding][pilot:audit] creates and renames an organization throug
   await page.getByPlaceholder("••••••••").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
   await expect(page.getByText("Welcome! Let's set up your brand.")).toBeVisible();
-  await page.getByLabel("Brand Name").fill("Maison Verde Onboarding Test Pilot");
+  await page.getByPlaceholder("e.g. Patagonia, PANGAIA…").fill("Maison Verde Onboarding Test Pilot");
   await page.getByRole("button", { name: "Complete Setup" }).click();
   await page.waitForURL("**/dashboard");
   await expect(page.getByText("Maison Verde Onboarding Test Pilot", { exact: true })).toBeVisible();
