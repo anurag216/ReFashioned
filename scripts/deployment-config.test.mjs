@@ -32,3 +32,15 @@ test("Replit deployment configuration cannot mutate a database automatically", a
     }
   }
 });
+
+test("Replit hosting does not self-bootstrap a different pnpm binary", async () => {
+  const npmrc = await readFile(new URL("../.npmrc", import.meta.url), "utf8");
+  const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+
+  assert.match(
+    npmrc,
+    /^manage-package-manager-versions=false$/m,
+    "Replit hosting must use its provided pnpm binary instead of self-bootstrapping during package install",
+  );
+  assert.equal(packageJson.packageManager, "pnpm@10.28.1", "repository pnpm version pin must remain explicit");
+});
