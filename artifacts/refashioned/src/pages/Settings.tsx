@@ -30,7 +30,7 @@ export function Settings() {
   async function retryPendingEvidenceScans() {
     if (!supabase || !isAdmin) return;
     setScanning(true); setScanStatus(null);
-    const { data, error } = await supabase.rpc("get_my_organization_evidence", { p_product_id: null });
+    const { data, error } = await supabase.rpc("get_my_organization_evidence", { p_product_id: undefined });
     if (error) {
       setScanStatus(`Unable to load pending evidence: ${error.message}`);
       setScanning(false);
