@@ -1319,6 +1319,15 @@ export type Database = {
         Args: { p_file_name: string; p_import_type: string }
         Returns: string
       }
+      create_product_material: {
+        Args: {
+          p_certification_required: boolean
+          p_composition_percentage: number
+          p_material_name: string
+          p_product_id: string
+        }
+        Returns: string
+      }
       create_supplier_contact: {
         Args: { p_email: string; p_name: string; p_supplier_id: string }
         Returns: string
@@ -1438,6 +1447,10 @@ export type Database = {
           stored_payload_hash: string
         }[]
       }
+      get_product_workspace: {
+        Args: { p_product_id: string }
+        Returns: Json
+      }
       get_public_product_passport: {
         Args: { p_public_slug: string }
         Returns: Json
@@ -1507,6 +1520,10 @@ export type Database = {
       }
       redeem_supplier_invite: {
         Args: { p_token: string }
+        Returns: undefined
+      }
+      remove_product_material: {
+        Args: { p_material_id: string }
         Returns: undefined
       }
       request_organization_deletion: {
@@ -1592,6 +1609,24 @@ export type Database = {
       }
       update_organization_member_role: {
         Args: { p_member_id: string; p_new_role: string; p_reason: string }
+        Returns: undefined
+      }
+      update_product_material: {
+        Args: {
+          p_certification_required: boolean
+          p_composition_percentage: number
+          p_material_id: string
+          p_material_name: string
+        }
+        Returns: undefined
+      }
+      update_product_metadata: {
+        Args: {
+          p_name: string
+          p_product_id: string
+          p_season: string
+          p_sku: string
+        }
         Returns: undefined
       }
       update_supplier_contact: {

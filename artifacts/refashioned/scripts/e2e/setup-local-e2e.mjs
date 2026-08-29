@@ -43,6 +43,7 @@ const DPP_TRUST_SUPPLIER_ID = "e2e40000-0000-4000-8000-000000000003";
 const DPP_TRUST_STAGE_ID = "e2e50000-0000-4000-8000-000000000003";
 const DPP_TRUST_EVIDENCE_ID = "e2e60000-0000-4000-8000-000000000003";
 const READINESS_PRODUCT_ID = "e2e30000-0000-4000-8000-000000000004";
+const WORKSPACE_PRODUCT_ID = "e2e30000-0000-4000-8000-000000000020";
 const READINESS_SUPPLIER_ID = "e2e40000-0000-4000-8000-000000000004";
 const READINESS_STAGE_ID = "e2e50000-0000-4000-8000-000000000004";
 const READINESS_EVIDENCE_ID = "e2e60000-0000-4000-8000-000000000004";
@@ -116,6 +117,7 @@ assertOk((await client.from("products").upsert([
   { id: "e2e30000-0000-4000-8000-000000000002", organization_id: ORGANIZATIONS.b, name: "Tenant B Secret Product", sku: "TENANT-B", season: "Evergreen", status: "draft" },
   { id: DPP_TRUST_PRODUCT_ID, organization_id: ORGANIZATIONS.a, name: "DPP Certification Trust Product", sku: "DPP-TRUST", season: "Evergreen", status: "draft" },
   { id: READINESS_PRODUCT_ID, organization_id: ORGANIZATIONS.a, name: "Pilot Readiness E2E Product", sku: "PILOT-READY", season: "Evergreen", status: "draft" },
+  { id: WORKSPACE_PRODUCT_ID, organization_id: ORGANIZATIONS.a, name: "Workspace E2E Product", sku: "WORKSPACE-E2E", season: "SS26", status: "draft" },
 ])).error, "upsert products");
 
 assertOk((await client.from("suppliers").upsert({
@@ -203,6 +205,7 @@ assertOk((await client.from("evidence_uploads").insert({
 assertOk((await client.from("certifications").delete().eq("evidence_id", READINESS_EVIDENCE_ID)).error, "clear pilot readiness certifications");
 assertOk((await client.from("evidence_uploads").delete().eq("id", READINESS_EVIDENCE_ID)).error, "clear pilot readiness evidence");
 assertOk((await client.from("product_materials").delete().eq("product_id", READINESS_PRODUCT_ID)).error, "clear pilot readiness materials");
+assertOk((await client.from("product_materials").delete().eq("product_id", WORKSPACE_PRODUCT_ID)).error, "clear workspace materials");
 assertOk((await client.from("product_materials").insert({ product_id: READINESS_PRODUCT_ID, material_name: "Pilot cotton", composition_percentage: 100, certification_required: false })).error, "insert pilot readiness material");
 assertOk((await client.from("lifecycle_stages").upsert({
   id: READINESS_STAGE_ID, organization_id: ORGANIZATIONS.a, product_id: READINESS_PRODUCT_ID,
