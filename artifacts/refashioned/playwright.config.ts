@@ -8,7 +8,9 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : [["list"]],
+  reporter: process.env.CI
+    ? [["list"], ["html", { open: "never" }], ["./scripts/e2e/pilot-acceptance-reporter.mjs"]]
+    : [["list"], ["./scripts/e2e/pilot-acceptance-reporter.mjs"]],
   use: {
     baseURL,
     trace: process.env.CI ? "retain-on-failure" : "on-first-retry",
