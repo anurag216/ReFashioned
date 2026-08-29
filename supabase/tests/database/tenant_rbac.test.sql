@@ -102,16 +102,7 @@ SELECT is_empty(
     SELECT * FROM changed$$,
   'manager cannot delete product'
 );
-SELECT is_empty(
-  $$WITH changed AS (
-      UPDATE public.organizations
-      SET name = 'manager org'
-      WHERE id = '10000000-0000-0000-0000-000000000001'
-      RETURNING 1
-    )
-    SELECT * FROM changed$$,
-  'manager cannot update organization'
-);
+SELECT throws_ok($$UPDATE public.organizations SET name = 'manager org' WHERE id = '10000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'manager cannot directly update organization');
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','viewer')$$, '42501', NULL, 'manager cannot manage memberships');
 SELECT throws_ok($$UPDATE public.products SET organization_id='10000000-0000-0000-0000-000000000002' WHERE id='30000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'update cannot move a record to another tenant');
 SELECT throws_ok($$SELECT * FROM public.supplier_invites$$, '42501', NULL, 'manager cannot manage supplier invitations');
