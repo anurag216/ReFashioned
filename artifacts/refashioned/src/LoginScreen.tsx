@@ -376,7 +376,7 @@ export default function LoginScreen() {
 
       {/* Page footer */}
       <p className="relative mt-8 text-xs text-center" style={{ color: "hsl(0 0% 95% / 0.2)" }}>
-        © 2025 RE:Fashioned · Sustainability Intelligence
+        © 2026 RE:Fashioned · Sustainability Intelligence
       </p>
     </div>
   );

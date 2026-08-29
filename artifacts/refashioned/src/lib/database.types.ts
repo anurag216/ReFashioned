@@ -1619,6 +1619,10 @@ export type Database = {
         Args: { p_member_id: string; p_new_role: string; p_reason: string }
         Returns: undefined
       }
+      update_organization_profile: {
+        Args: { p_name: string }
+        Returns: undefined
+      }
       update_product_material: {
         Args: {
           p_certification_required: boolean

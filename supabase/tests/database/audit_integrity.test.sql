@@ -69,7 +69,7 @@ SELECT lives_ok(format('SELECT public.revoke_organization_member_access(%L,%L)',
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_added' AND profile_id='a0000000-0000-0000-0000-000000000005' AND entity_name=current_setting('test.audit_member_id')),1::bigint,'member addition records exactly one invitee actor and membership ID');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_role_changed' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name=current_setting('test.audit_member_id')),1::bigint,'only the real role change records one admin event');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_member_removed' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name=current_setting('test.audit_member_id')),1::bigint,'member removal records exactly one admin actor and membership ID');
-SELECT lives_ok($$UPDATE public.organizations SET name='Audit Tenant A updated' WHERE id='a1000000-0000-0000-0000-000000000001'$$,'admin updates organization settings');
+SELECT lives_ok($$SELECT public.update_organization_profile('Audit Tenant A updated')$$,'admin updates organization settings through authoritative RPC');
 SELECT is((SELECT count(*) FROM public.audit_logs WHERE action='organization_updated' AND profile_id='a0000000-0000-0000-0000-000000000001' AND entity_name='a1000000-0000-0000-0000-000000000001'),1::bigint,'meaningful organization update is audited');
 RESET ROLE;
 

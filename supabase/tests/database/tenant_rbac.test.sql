@@ -102,16 +102,7 @@ SELECT is_empty(
     SELECT * FROM changed$$,
   'manager cannot delete product'
 );
-SELECT is_empty(
-  $$WITH changed AS (
-      UPDATE public.organizations
-      SET name = 'manager org'
-      WHERE id = '10000000-0000-0000-0000-000000000001'
-      RETURNING 1
-    )
-    SELECT * FROM changed$$,
-  'manager cannot update organization'
-);
+SELECT throws_ok($$UPDATE public.organizations SET name = 'manager org' WHERE id = '10000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'manager cannot directly update organization');
 SELECT throws_ok($$INSERT INTO public.organization_members (organization_id,profile_id,role) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000005','viewer')$$, '42501', NULL, 'manager cannot manage memberships');
 SELECT throws_ok($$UPDATE public.products SET organization_id='10000000-0000-0000-0000-000000000002' WHERE id='30000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'update cannot move a record to another tenant');
 SELECT throws_ok($$SELECT * FROM public.supplier_invites$$, '42501', NULL, 'manager cannot manage supplier invitations');
@@ -124,7 +115,7 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
 SET LOCAL ROLE authenticated;
 SELECT lives_ok($$INSERT INTO public.products (organization_id,name) VALUES ('10000000-0000-0000-0000-000000000001','admin product')$$, 'admin manages permitted tenant records');
-SELECT lives_ok($$UPDATE public.organizations SET name='Tenant A updated' WHERE id='10000000-0000-0000-0000-000000000001'$$, 'admin updates organization settings');
+SELECT throws_ok($$UPDATE public.organizations SET name='Tenant A updated' WHERE id='10000000-0000-0000-0000-000000000001'$$, '42501', NULL, 'admin direct organization update is denied');
 SELECT throws_ok($$INSERT INTO public.organization_members (id,organization_id,profile_id,role) VALUES ('20000000-0000-0000-0000-000000000006','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000006','manager')$$, '42501', NULL, 'admin direct membership insert is denied');
 SELECT throws_ok($$UPDATE public.organization_members SET role='viewer' WHERE id='20000000-0000-0000-0000-000000000002'$$, '42501', NULL, 'admin direct membership update is denied');
 SELECT throws_ok($$DELETE FROM public.organization_members WHERE id='20000000-0000-0000-0000-000000000002'$$, '42501', NULL, 'admin direct membership delete is denied');

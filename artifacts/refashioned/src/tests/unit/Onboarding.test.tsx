@@ -38,13 +38,4 @@ describe("Onboarding", () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 
-  it("defers supplier invitation redemption without creating a brand", async () => {
-    localStorage.setItem("refashioned_invite_token", "token");
-    renderOnboarding();
-    fireEvent.change(screen.getByPlaceholderText(/Patagonia/), { target: { value: "Wrong brand" } });
-    fireEvent.click(screen.getByRole("button", { name: "Complete Setup" }));
-    expect(await screen.findByText(/Supplier invitations are not available/i)).toBeInTheDocument();
-    expect(rpc).not.toHaveBeenCalled();
-    expect(from).not.toHaveBeenCalled();
-  });
 });

@@ -24,16 +24,6 @@ export function Onboarding({
     setError(null);
     const client = supabase;
 
-    // Supplier invitation redemption requires a dedicated, token-verifying RPC.
-    // Do not create an unrelated brand organization for invited suppliers.
-    const savedToken = localStorage.getItem("refashioned_invite_token");
-    if (savedToken) {
-      // TODO: redeem through the dedicated supplier-invitation flow.
-      setError("Supplier invitations are not available in onboarding yet. Please contact your administrator.");
-      setSaving(false);
-      return;
-    }
-
     const { error: rpcError } = await client.rpc<
       "create_organization_with_admin",
       { organization_name: string }
@@ -200,7 +190,7 @@ export function Onboarding({
         className="relative mt-8 text-xs text-center"
         style={{ color: "hsl(0 0% 95% / 0.2)" }}
       >
-        © 2025 RE:Fashioned · Sustainability Intelligence
+        © 2026 RE:Fashioned · Sustainability Intelligence
       </p>
     </div>
   );

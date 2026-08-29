@@ -1,270 +1,32 @@
-import { useState, useEffect } from "react";
-import { Settings as SettingsIcon, User, Camera, CheckCircle2, AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { usePermissions } from "../lib/auth/usePermissions";
 import { useOrg } from "../lib/api/useOrg";
 import { TeamAccess } from "../components/TeamAccess";
 
 export function Settings() {
-  const [activeTab, setActiveTab] = useState("account");
-
-  const [orgName,        setOrgName]        = useState("");
-  const [userEmail,      setUserEmail]      = useState("");
-  const [orgSaving,      setOrgSaving]      = useState(false);
-  const [orgSaveError,   setOrgSaveError]   = useState<string | null>(null);
-  const [orgSaveSuccess, setOrgSaveSuccess] = useState(false);
-  const [erasureStatus, setErasureStatus] = useState<string | null>(null);
-  const [erasureError, setErasureError] = useState<string | null>(null);
-  const [erasureSubmitting, setErasureSubmitting] = useState(false);
-  const { isAdmin } = usePermissions();
+  const { isAdmin, role } = usePermissions();
   const { data: org } = useOrg();
-  const orgId = org?.id ?? null;
-
-  useEffect(() => {
-    if (!supabase) return;
-    const client = supabase;
-    (async () => {
-      const { data: { user } } = await client.auth.getUser();
-      if (user?.email) setUserEmail(user.email);
-      if (org?.name) setOrgName(org.name);
-    })();
-  }, [org?.name]);
-
-  async function handleSaveChanges() {
-    if (!supabase || !orgId || !orgName.trim()) {
-      setOrgSaveError("Company name cannot be empty.");
-      return;
-    }
-    setOrgSaving(true); setOrgSaveError(null); setOrgSaveSuccess(false);
-    const client = supabase;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await ((client.from("organizations") as any).update({ name: orgName.trim() }).eq("id", orgId));
-      if (error) throw error;
-      setOrgSaveSuccess(true);
-      setTimeout(() => setOrgSaveSuccess(false), 4000);
-    } catch (e: unknown) {
-      setOrgSaveError(e instanceof Error ? e.message : "Save failed — please try again.");
-    } finally {
-      setOrgSaving(false);
-    }
-  }
-
-  const tabs = [
-    { id: "account", label: "Account Information" },
-    ...(isAdmin ? [{ id: "team", label: "Team Access" }] : []),
-    { id: "notifications", label: "Notifications" },
-    { id: "preferences", label: "Preferences" },
-    { id: "api", label: "API Access" },
-    { id: "security", label: "Security" },
-    { id: "privacy", label: "Privacy & Data" },
-  ];
+  const [email, setEmail] = useState("");
+  const [tab, setTab] = useState<"account" | "team" | "privacy">("account");
+  const [status, setStatus] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const tabs = [{ id: "account" as const, label: "Account" }, ...(isAdmin ? [{ id: "team" as const, label: "Team Access" }] : []), { id: "privacy" as const, label: "Privacy & Data" }];
+  useEffect(() => { void supabase?.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? "")); }, []);
 
   async function requestErasure() {
-    if (!supabase || !window.confirm("Request deletion of your account identity and access? This cannot be processed without additional verification.")) return;
-    setErasureSubmitting(true); setErasureError(null);
-    // The RPC has no subject argument: the database derives identity from auth.uid().
+    if (!supabase || !window.confirm("Request deletion of your account identity and access?")) return;
+    setSubmitting(true);
     const { data, error } = await supabase.rpc("request_personal_data_erasure");
-    if (error) setErasureError(error.message);
-    else setErasureStatus((data as { status?: string } | null)?.status ?? "requested");
-    setErasureSubmitting(false);
+    setStatus(error?.message ?? `Request received. Current status: ${(data as { status?: string } | null)?.status ?? "requested"}.`);
+    setSubmitting(false);
   }
 
-  return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Account Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Customize your account information and platform features</p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={handleSaveChanges}
-            disabled={orgSaving}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 px-5 py-2 rounded-md text-sm font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {orgSaving
-              ? <><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/></svg> Saving…</>
-              : "Save Changes"
-            }
-          </button>
-        )}
-      </div>
-
-      <div className="border-b border-border overflow-x-auto hide-scrollbar">
-        <div className="flex gap-6 min-w-max px-1">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {orgSaveSuccess && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-          <p className="text-sm text-green-700 font-medium">Changes saved successfully.</p>
-        </div>
-      )}
-      {orgSaveError && (
-        <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
-          <p className="text-sm text-red-700">{orgSaveError}</p>
-        </div>
-      )}
-
-      {activeTab === "account" && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-card rounded-lg p-6 shadow-sm border border-card-border text-center flex flex-col items-center">
-              <div className="relative mb-4 group cursor-pointer">
-                <div className="w-24 h-24 rounded-full bg-muted flex items-center justify-center overflow-hidden border border-border">
-                  <User className="w-10 h-10 text-muted-foreground" />
-                </div>
-                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="w-6 h-6 text-white" />
-                </div>
-              </div>
-              <h3 className="font-semibold text-foreground">Emma Johnson</h3>
-              <p className="text-sm text-muted-foreground mb-4">Sustainability Manager</p>
-              
-              <div className="flex gap-2 w-full">
-                <button className="flex-1 bg-white border border-border hover:bg-muted text-foreground text-xs font-medium py-2 rounded transition-colors shadow-sm">
-                  Upload New
-                </button>
-                <button className="px-3 bg-white border border-border hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-muted-foreground text-xs font-medium py-2 rounded transition-colors shadow-sm">
-                  Remove
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-card rounded-lg p-6 shadow-sm border border-card-border">
-              <h3 className="font-semibold text-foreground mb-4 text-sm uppercase tracking-wider">Account Status</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center pb-4 border-b border-border">
-                  <span className="text-sm text-muted-foreground">Account Type</span>
-                  <span className="text-sm font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Enterprise Plan</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Subscription</span>
-                    <a href="#" className="text-sm text-blue-600 hover:underline">Manage</a>
-                  </div>
-                  <span className="text-sm font-medium text-foreground">Renews on Nov 15, 2023</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-card rounded-lg p-6 shadow-sm border border-card-border">
-              <h3 className="font-semibold text-foreground mb-4">Personal Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">First Name</label>
-                  <input type="text" defaultValue="Emma" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Last Name</label>
-                  <input type="text" defaultValue="Johnson" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Email Address</label>
-                  <input
-                    type="email"
-                    value={userEmail}
-                    readOnly
-                    className="w-full bg-muted/50 border border-border rounded-md px-3 py-2 text-sm focus:outline-none text-muted-foreground cursor-default"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Phone Number</label>
-                  <input type="tel" defaultValue="+1(555) 123-4567" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Job Title</label>
-                  <input type="text" defaultValue="Sustainability Manager" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Department</label>
-                  <select className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
-                    <option>Sustainability</option>
-                    <option>Sourcing & Procurement</option>
-                    <option>Compliance</option>
-                    <option>Operations</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-card rounded-lg p-6 shadow-sm border border-card-border">
-              <h3 className="font-semibold text-foreground mb-4">Company Information</h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Company Name</label>
-                    <input
-                      type="text"
-                      value={orgName}
-                      onChange={e => setOrgName(e.target.value)}
-                      placeholder="Your organisation name"
-                      className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-foreground">Industry</label>
-                    <select className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20">
-                      <option>Apparel & Fashion</option>
-                      <option>Textile Manufacturing</option>
-                      <option>Retail</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">Company Address</label>
-                  <input type="text" defaultValue="123 Fashion Avenue, Suite 500" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 mb-2" />
-                  <div className="grid grid-cols-3 gap-2">
-                    <input type="text" placeholder="City" defaultValue="New York" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 col-span-1" />
-                    <input type="text" placeholder="State" defaultValue="NY" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 col-span-1" />
-                    <input type="text" placeholder="Zip" defaultValue="10001" className="w-full bg-white border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 col-span-1" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {activeTab === "team" && isAdmin && <TeamAccess />}
-      {activeTab === "privacy" && (
-        <section className="bg-card rounded-lg p-6 shadow-sm border border-card-border max-w-2xl" aria-labelledby="privacy-heading">
-          <h2 id="privacy-heading" className="text-lg font-semibold text-foreground">Privacy &amp; Data</h2>
-          <h3 className="font-medium text-foreground mt-5">Request account deletion</h3>
-          <p className="text-sm text-muted-foreground mt-2">
-            This requests removal of your account access and personal identity. Company sustainability,
-            compliance, evidence, and security records may be preserved when the product or an approved retention policy requires them.
-          </p>
-          {erasureStatus && <p role="status" className="mt-4 text-sm text-green-700">Request received. Current status: <strong>{erasureStatus}</strong>.</p>}
-          {erasureError && <p role="alert" className="mt-4 text-sm text-red-700">{erasureError}</p>}
-          <button type="button" onClick={requestErasure} disabled={erasureSubmitting || erasureStatus === "requested" || erasureStatus === "processing"}
-            className="mt-5 border border-red-300 text-red-700 hover:bg-red-50 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-60">
-            {erasureSubmitting ? "Submitting…" : "Request account deletion"}
-          </button>
-        </section>
-      )}
-      {activeTab !== "account" && activeTab !== "team" && activeTab !== "privacy" && (
-        <div className="bg-card rounded-lg p-12 shadow-sm border border-card-border text-center">
-          <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-            <SettingsIcon className="w-6 h-6 text-muted-foreground" />
-          </div>
-          <h3 className="font-semibold text-foreground">Settings section coming soon</h3>
-          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">This section is currently under development. Please check back later for updates to these preferences.</p>
-        </div>
-      )}
-    </div>
-  );
+  return <main className="p-6 md:p-8 max-w-5xl w-full mx-auto space-y-6">
+    <header><h1 className="text-2xl font-bold">Settings</h1><p className="text-sm text-muted-foreground mt-1">Working account and data controls.</p></header>
+    <nav className="flex gap-5 border-b" aria-label="Settings sections">{tabs.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`pb-3 text-sm font-medium border-b-2 ${tab === item.id ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>{item.label}</button>)}</nav>
+    {tab === "account" && <section className="bg-card border rounded-lg p-6"><h2 className="font-semibold mb-5">Account</h2><dl className="grid sm:grid-cols-2 gap-5"><div><dt className="text-xs uppercase text-muted-foreground">Email</dt><dd className="mt-1">{email || "—"}</dd></div><div><dt className="text-xs uppercase text-muted-foreground">Organization</dt><dd className="mt-1">{org?.name ?? "—"}</dd></div><div><dt className="text-xs uppercase text-muted-foreground">Role</dt><dd className="mt-1 capitalize">{role ?? "—"}</dd></div></dl>{isAdmin && <a href="/profile" className="inline-block mt-6 text-sm text-primary font-medium">Edit organization profile</a>}</section>}
+    {tab === "team" && isAdmin && <TeamAccess />}
+    {tab === "privacy" && <section className="bg-card border rounded-lg p-6 max-w-2xl"><h2 className="font-semibold">Privacy &amp; Data</h2><p className="text-sm text-muted-foreground mt-2">Request removal of your account access and personal identity. Required company and security records may be retained.</p><button onClick={() => void requestErasure()} disabled={submitting} className="mt-5 border border-red-300 text-red-700 rounded-md px-4 py-2 text-sm disabled:opacity-50">{submitting ? "Submitting…" : "Request account deletion"}</button>{status && <p role="status" className="mt-4 text-sm">{status}</p>}</section>}
+  </main>;
 }
