@@ -16,8 +16,9 @@ SELECT function_privs_are('public','get_product_passport_preview',ARRAY['uuid'],
 SET LOCAL ROLE anon; SELECT throws_ok($$SELECT public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')$$,'42501',NULL,'anonymous denied by API grant'); RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','aa000000-0000-0000-0000-000000000001',true); SET LOCAL ROLE authenticated;
 SELECT lives_ok($$SELECT public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')$$,'admin previews own product');
+RESET ROLE;
 SELECT is(public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001'),public.build_public_product_passport_payload('ac000000-0000-0000-0000-000000000001'),'preview delegates to authoritative builder');
-SELECT ok(public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')::text !~ '(storage_path|supplier_contact|email|audit|evidence_id)','private evidence and supplier PII absent'); RESET ROLE;
+SET LOCAL ROLE authenticated; SELECT ok(public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')::text !~ '(storage_path|supplier_contact|email|audit|evidence_id)','private evidence and supplier PII absent'); RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','aa000000-0000-0000-0000-000000000002',true); SET LOCAL ROLE authenticated; SELECT lives_ok($$SELECT public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')$$,'manager previews own product'); RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','aa000000-0000-0000-0000-000000000003',true); SET LOCAL ROLE authenticated; SELECT lives_ok($$SELECT public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')$$,'viewer previews own product'); RESET ROLE;
 SELECT set_config('request.jwt.claim.sub','aa000000-0000-0000-0000-000000000004',true); SET LOCAL ROLE authenticated; SELECT throws_ok($$SELECT public.get_product_passport_preview('ac000000-0000-0000-0000-000000000001')$$,'42501','not authorized','other tenant denied'); RESET ROLE;
