@@ -4,7 +4,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.106.1";
 type SupportedMime = "application/pdf" | "image/png" | "image/jpeg";
 type EvidenceRow = {
   id: string;
-  uploaded_by: string;
   lifecycle_stage_id: string;
   storage_bucket: string;
   storage_path: string;
@@ -69,7 +68,6 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  let userId: string | null = null;
   let userClient: ReturnType<typeof createClient> | null = null;
   if (!trustedOperator) {
     const match = authorization.match(/^Bearer\s+(.+)$/i);
@@ -77,7 +75,6 @@ Deno.serve(async (request) => {
     const jwt = match[1];
     const { data: userData, error: userError } = await service.auth.getUser(jwt);
     if (userError || !userData.user) return response("Unauthorized", 401);
-    userId = userData.user.id;
     userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
       auth: { persistSession: false, autoRefreshToken: false },
@@ -86,7 +83,7 @@ Deno.serve(async (request) => {
 
   const { data, error: evidenceError } = await service
     .from("evidence_uploads")
-    .select("id,uploaded_by,lifecycle_stage_id,storage_bucket,storage_path,size_bytes,mime_type,status,scan_status,integrity_legacy_accepted")
+    .select("id,lifecycle_stage_id,storage_bucket,storage_path,size_bytes,mime_type,status,scan_status,integrity_legacy_accepted")
     .eq("id", body.evidenceId)
     .maybeSingle();
   if (evidenceError) return response("Evidence lookup failed", 500);
@@ -97,7 +94,11 @@ Deno.serve(async (request) => {
     return response("Evidence is not scan eligible", 409);
   }
   if (!trustedOperator) {
-    if (!userId || evidence.uploaded_by !== userId || !userClient) return response("Not authorized", 403);
+    if (!userClient) return response("Not authorized", 403);
+    // Re-use the authoritative live authorization predicate instead of trusting
+    // the historical uploader identity. This permits current org admins/managers
+    // to recover supplier or legacy pending evidence while preserving tenant and
+    // supplier scope, and lets revoked users fail closed immediately.
     const { data: allowed, error: authorizationError } = await userClient.rpc("current_actor_can_upload_evidence", {
       p_lifecycle_stage_id: evidence.lifecycle_stage_id,
     });
