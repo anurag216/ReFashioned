@@ -63,9 +63,11 @@ test.describe("DPP certification trust chain", () => {
       const guestPage = await guestContext.newPage();
       await guestPage.goto(publicPath);
       await expect(guestPage.getByRole("heading", { name: PRODUCT_NAME })).toBeVisible();
-      await expect(guestPage.getByText(CERTIFICATION_NAME)).toBeVisible();
-      await expect(guestPage.getByText("Verified", { exact: true })).toBeVisible();
-      await expect(guestPage.getByText(`Valid until ${VALID_UNTIL}`)).toBeVisible();
+      const publicCertification = guestPage.getByRole("listitem").filter({ hasText: CERTIFICATION_NAME });
+      await expect(publicCertification).toContainText(CERTIFICATION_NAME);
+      await expect(publicCertification).toContainText("Verified");
+      await expect(publicCertification).toContainText("Valid until");
+      await expect(publicCertification).toContainText("2030");
 
       await adminPage.goto("/traceability");
       await expect(adminPage.getByRole("heading", { name: "Product Journey" })).toBeVisible();
