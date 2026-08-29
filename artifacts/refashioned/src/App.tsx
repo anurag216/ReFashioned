@@ -2,8 +2,8 @@ import { lazy, Suspense, useState, useEffect } from "react";
 import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
-  Bell, Grid, ChevronDown, User, FileCheck, ClipboardList,
-  Users, Globe, LogOut, Package, CreditCard, ScrollText, Upload,
+  Grid, User, FileCheck, ClipboardList,
+  Users, LogOut, Package, ScrollText, Upload,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./lib/supabaseClient";
@@ -23,8 +23,6 @@ const DigitalProductPassport = lazy(() => import("./pages/DigitalProductPassport
 const BrandProfile = lazy(() => import("./pages/BrandProfile").then(m => ({ default: m.BrandProfile })));
 const SettingsPage = lazy(() => import("./pages/Settings").then(m => ({ default: m.Settings })));
 const CSRDReport = lazy(() => import("./pages/CSRDReport").then(m => ({ default: m.CSRDReport })));
-const CarbonCalculator = lazy(() => import("./pages/CarbonCalculator").then(m => ({ default: m.CarbonCalculator })));
-const RegulatoryRadar = lazy(() => import("./pages/RegulatoryRadar").then(m => ({ default: m.RegulatoryRadar })));
 const NotFound = lazy(() => import("./pages/NotFound").then(m => ({ default: m.NotFound })));
 const ProductCatalog = lazy(() => import("./pages/ProductCatalog").then(m => ({ default: m.ProductCatalog })));
 const ProductWorkspace = lazy(() => import("./pages/ProductWorkspace").then(m => ({ default: m.ProductWorkspace })));
@@ -32,7 +30,6 @@ const PublicPassport = lazy(() => import("./pages/PublicPassport").then(m => ({ 
 const Onboarding = lazy(() => import("./pages/Onboarding").then(m => ({ default: m.Onboarding })));
 const Join = lazy(() => import("./pages/Join").then(m => ({ default: m.Join })));
 const TeamJoin = lazy(() => import("./pages/TeamJoin").then(m => ({ default: m.TeamJoin })));
-const Billing = lazy(() => import("./pages/Billing").then(m => ({ default: m.Billing })));
 const AuditLogPage = lazy(() => import("./pages/AuditLog").then(m => ({ default: m.AuditLogPage })));
 const DataImport = lazy(() => import("./pages/DataImport").then(m => ({ default: m.DataImport })));
 
@@ -78,9 +75,7 @@ const navItems = [
   { path: "/passport",     label: "Digital Product Passport", icon: FileCheck       },
   { path: "/reports/csrd", label: "CSRD Data Readiness",     icon: ClipboardList   },
   { path: "/suppliers",    label: "Supplier Portal",          icon: Users           },
-  { path: "/regulatory",   label: "Regulatory Radar",         icon: Globe           },
   { path: "/settings",     label: "Settings",                 icon: SettingsIcon    },
-  { path: "/settings/billing", label: "Billing",              icon: CreditCard      },
   { path: "/audit",        label: "Audit Trail",              icon: ScrollText      },
 ];
 
@@ -257,20 +252,7 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative">
         {/* Top Bar */}
         <header className="h-16 bg-white border-b border-border flex items-center justify-end px-6 shrink-0 z-10 relative">
-          <div className="flex items-center gap-4">
-            <button className="relative p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
-            </button>
-            <div className="h-6 w-px bg-border" />
-            <button className="flex items-center gap-2 hover:bg-muted px-2 py-1 -mr-2 rounded-md transition-colors">
-              <div className="w-8 h-8 rounded-full bg-muted border border-border flex items-center justify-center">
-                <User className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <span className="text-sm font-medium hidden sm:block max-w-[160px] truncate">{session.user.email}</span>
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
+          <span className="text-sm text-muted-foreground truncate">{session.user.email}</span>
         </header>
 
         {/* Routed page content */}
@@ -301,17 +283,8 @@ export default function App() {
               <Route path="/reports/csrd">
                 <CSRDReport />
               </Route>
-              <Route path="/calculator">
-                <CarbonCalculator />
-              </Route>
-              <Route path="/regulatory">
-                <RegulatoryRadar />
-              </Route>
               <Route path="/profile">
-                <BrandProfile onViewDashboard={() => setLocation("/dashboard")} />
-              </Route>
-              <Route path="/settings/billing">
-                <Billing />
+                <BrandProfile />
               </Route>
               <Route path="/settings">
                 <SettingsPage />

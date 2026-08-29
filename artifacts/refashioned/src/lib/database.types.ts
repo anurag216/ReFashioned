@@ -1615,6 +1615,10 @@ export type Database = {
         Args: { p_product_id: string }
         Returns: undefined
       }
+      update_organization_profile: {
+        Args: { p_name: string }
+        Returns: undefined
+      }
       update_organization_member_role: {
         Args: { p_member_id: string; p_new_role: string; p_reason: string }
         Returns: undefined
