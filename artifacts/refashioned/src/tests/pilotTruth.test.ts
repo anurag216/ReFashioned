@@ -19,6 +19,10 @@ describe("paying-pilot customer-facing truth", () => {
   ];
 
   it.each(forbidden)("does not ship demo claim %s", claim => expect(source).not.toContain(claim));
+  it("does not ship unsupported audit or compliance claims", () => {
+    expect(source).not.toMatch(/legally\s+defensible/i);
+    expect(source).not.toMatch(/suitable\s+for[^.\n]{0,80}\b(?:csrd|espr|iso\s*14001)\b/i);
+  });
   it("does not ship fabricated metric pairs", () => {
     expect(source).not.toMatch(/CO₂ Reduction[\s\S]{0,100}42%/);
     expect(source).not.toMatch(/Water Conservation[\s\S]{0,100}35%/);

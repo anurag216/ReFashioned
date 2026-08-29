@@ -193,14 +193,14 @@ export function AuditLogPage() {
         </button>
       </div>
 
-      {/* ── Compliance callout ──────────────────────────────────────── */}
+      {/* ── Audit history callout ──────────────────────────────────────── */}
       <div className="flex items-start gap-3 bg-primary/5 border border-primary/20 rounded-xl px-5 py-4">
         <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-semibold text-primary">Legally defensible audit history</p>
+          <p className="text-sm font-semibold text-primary">Traceable audit history</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Every action is timestamped with the acting user and entity. Records are append-only
-            and scoped to your organisation — suitable for CSRD, ESPR, and ISO 14001 audits.
+            Tracked actions are timestamped with the acting user and entity where available. Records
+            are append-only and scoped to your organisation.
           </p>
         </div>
       </div>
