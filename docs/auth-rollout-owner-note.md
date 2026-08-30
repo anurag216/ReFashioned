@@ -1,0 +1,1 @@
+Pilot auth rollout is gated on CI, Paris Supabase Auth configuration, Google OAuth provider setup, SMTP testing, and production smoke validation.
