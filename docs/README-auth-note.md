@@ -1,0 +1,1 @@
+Production authentication guidance for the pilot is maintained in `auth-production.md` and `auth-production-checklist.md`.
