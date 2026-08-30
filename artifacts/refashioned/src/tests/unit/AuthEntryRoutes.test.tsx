@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-const source = readFileSync(fileURLToPath(new URL("../../main.tsx", import.meta.url)), "utf8");
+const source = readFileSync(join(process.cwd(), "src/main.tsx"), "utf8");
 
 describe("production auth entry routes", () => {
   it("routes password recovery outside the authenticated app shell", () => {
