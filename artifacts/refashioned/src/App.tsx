@@ -3,7 +3,7 @@ import { Switch, Route, Link, Redirect, useLocation } from "wouter";
 import {
   LayoutDashboard, GitBranch, Building2, Settings as SettingsIcon,
   Grid, User, FileCheck, ClipboardList,
-  Users, LogOut, Package, ScrollText, Upload,
+  Users, LogOut, Package, ScrollText, Upload, Menu, X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "./lib/supabaseClient";
@@ -73,7 +73,7 @@ const navItems = [
   { path: "/traceability", label: "Lifecycle Traceability",   icon: GitBranch       },
   { path: "/profile",      label: "Brand Profile",            icon: Building2       },
   { path: "/passport",     label: "Digital Product Passport", icon: FileCheck       },
-  { path: "/reports/csrd", label: "CSRD Data Readiness",     icon: ClipboardList   },
+  { path: "/reports/csrd", label: "CSRD Data Readiness",      icon: ClipboardList   },
   { path: "/suppliers",    label: "Supplier Portal",          icon: Users           },
   { path: "/settings",     label: "Settings",                 icon: SettingsIcon    },
   { path: "/audit",        label: "Audit Trail",              icon: ScrollText      },
@@ -83,6 +83,7 @@ export default function App() {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [location, setLocation] = useLocation();
   const membership = useCurrentMembership(session?.user.id ?? null);
   const supplierAccess = useSupplierAccess(session?.user.id ?? null);
@@ -105,6 +106,10 @@ export default function App() {
     });
     return () => subscription.unsubscribe();
   }, [queryClient]);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location]);
 
   // Public internal-team invite route — accessible without authentication.
   if (location.startsWith("/team/join")) {
@@ -186,15 +191,39 @@ export default function App() {
     );
   }
 
+  const renderNav = (mobile = false) => (
+    <nav className="space-y-1">
+      {navItems.map(item => {
+        const isActive = location === item.path ||
+          (item.path !== "/" && location.startsWith(item.path));
+        return (
+          <Link
+            key={item.path}
+            href={item.path}
+            onClick={mobile ? () => setMobileNavOpen(false) : undefined}
+            className={`w-full flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
+              isActive
+                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
+                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            }`}
+          >
+            <item.icon className={`w-4 h-4 shrink-0 ${isActive ? "opacity-100" : "opacity-70"}`} />
+            <span className="min-w-0 break-words">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
   return (
     <AuthUserProvider userId={session.user.id}>
     <ErrorBoundary>
-    <div className="flex h-screen bg-background text-foreground font-sans overflow-hidden">
+    <div className="flex h-[100dvh] bg-background text-foreground font-sans overflow-hidden">
 
-      {/* ── Sidebar ─────────────────────────────────────────────── */}
-      <aside className="w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col shrink-0">
+      {/* ── Desktop sidebar ─────────────────────────────────────── */}
+      <aside className="hidden md:flex w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex-col shrink-0">
         <div className="h-16 flex items-center px-6 border-b border-sidebar-border/30">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="bg-sidebar-primary text-sidebar-primary-foreground p-1.5 rounded-md shrink-0">
               <Grid className="w-4 h-4" />
             </div>
@@ -206,26 +235,7 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-6 px-3">
-          <nav className="space-y-1">
-            {navItems.map(item => {
-              const isActive = location === item.path ||
-                (item.path !== "/" && location.startsWith(item.path));
-              return (
-                <Link
-                  key={item.path}
-                  href={item.path}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
-                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  }`}
-                >
-                  <item.icon className={`w-4 h-4 ${isActive ? "opacity-100" : "opacity-70"}`} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          {renderNav()}
         </div>
 
         <div className="p-4 border-t border-sidebar-border/30 mt-auto">
@@ -240,7 +250,8 @@ export default function App() {
             <button
               onClick={() => { void handleSignOut(); }}
               title="Sign out"
-              className="shrink-0 p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+              aria-label="Sign out"
+              className="shrink-0 flex h-11 w-11 items-center justify-center rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -248,15 +259,91 @@ export default function App() {
         </div>
       </aside>
 
+      {/* ── Mobile/tablet navigation drawer ────────────────────── */}
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Application navigation">
+          <button
+            type="button"
+            aria-label="Close navigation"
+            className="absolute inset-0 bg-black/55"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <aside className="relative z-10 flex h-full w-[min(20rem,86vw)] flex-col bg-sidebar text-sidebar-foreground shadow-2xl">
+            <div className="h-16 flex items-center justify-between gap-3 px-4 border-b border-sidebar-border/30">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="bg-sidebar-primary text-sidebar-primary-foreground p-1.5 rounded-md shrink-0">
+                  <Grid className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-sm tracking-tight leading-tight">RE:Fashioned</span>
+                  <SidebarOrgBadge />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                aria-label="Close navigation"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 px-3">
+              {renderNav(true)}
+            </div>
+
+            <div className="p-4 border-t border-sidebar-border/30 mt-auto">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-sidebar-accent flex items-center justify-center shrink-0 border border-sidebar-border">
+                  <User className="w-5 h-5 text-sidebar-foreground/70" />
+                </div>
+                <div className="overflow-hidden flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{session.user.email}</p>
+                  <p className="text-xs text-sidebar-foreground/60 truncate">Signed in</p>
+                </div>
+                <button
+                  onClick={() => { setMobileNavOpen(false); void handleSignOut(); }}
+                  title="Sign out"
+                  aria-label="Sign out"
+                  className="shrink-0 flex h-11 w-11 items-center justify-center rounded-md text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
       {/* ── Main content ────────────────────────────────────────── */}
       <main className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden relative">
         {/* Top Bar */}
-        <header className="h-16 bg-white border-b border-border flex items-center justify-end px-6 shrink-0 z-10 relative">
-          <span className="text-sm text-muted-foreground truncate">{session.user.email}</span>
+        <header className="h-16 bg-white border-b border-border flex items-center justify-between md:justify-end gap-3 px-3 sm:px-6 shrink-0 z-10 relative">
+          <div className="flex min-w-0 items-center gap-2 md:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-accent"
+              aria-label="Open navigation"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="bg-primary text-primary-foreground p-1.5 rounded-md shrink-0">
+                <Grid className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold leading-tight">RE:Fashioned</p>
+                <p className="truncate text-[10px] text-muted-foreground sm:hidden">Pilot workspace</p>
+              </div>
+            </div>
+          </div>
+          <span className="hidden sm:block max-w-[42vw] md:max-w-none text-sm text-muted-foreground truncate">{session.user.email}</span>
         </header>
 
         {/* Routed page content */}
-        <div className="flex-1 overflow-y-auto relative flex flex-col">
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-auto overscroll-contain relative flex flex-col">
           <Suspense fallback={<DarkSpinner />}>
             <Switch>
               <Route path="/">
