@@ -1,0 +1,63 @@
+name: Supabase Keepalive and Health Probe
+
+on:
+  schedule:
+    # Supabase Free projects can be paused after a week of low database activity.
+    # Three DB-backed requests per day per project keeps the projects warm without
+    # creating, mutating, or exposing application data.
+    - cron: "23 1,9,17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    name: Keep ${{ matrix.project_name }} active
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project_name: RE:Fashioned-Backend
+            supabase_url: https://rbamqzhvwpgvblkenoru.supabase.co
+            publishable_key: sb_publishable_WqffLPf99FczlrRaSvONHA_ivfniPme
+          - project_name: RE:Fashioned-Production-EU
+            supabase_url: https://bqgakgruhvskpauafthe.supabase.co
+            publishable_key: sb_publishable_Q18yCShbH6tNt00PzEAOdQ_KXQXvi11
+
+    steps:
+      - name: Run harmless DB-backed health probe
+        env:
+          PROJECT_NAME: ${{ matrix.project_name }}
+          SUPABASE_URL: ${{ matrix.supabase_url }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ matrix.publishable_key }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # get_public_product_passport is already an intentionally anonymous,
+          # read-only RPC in both environments. A deliberately impossible slug
+          # returns null while still executing a genuine user database query.
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 5 \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --request POST \
+            --header "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+            --header "Content-Type: application/json" \
+            --data '{"p_public_slug":"__refashioned_automated_health_probe__"}' \
+            "${SUPABASE_URL}/rest/v1/rpc/get_public_product_passport" \
+            --output /dev/null
+
+          printf 'Database-backed Supabase health probe succeeded for %s.\n' "${PROJECT_NAME}"
