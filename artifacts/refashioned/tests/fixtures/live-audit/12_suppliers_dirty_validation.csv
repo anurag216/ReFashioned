@@ -1,0 +1,19 @@
+﻿supplier_reference,name,location,tier,contact_name,contact_email
+,Nameless Reference Textiles,"Porto, Portugal",1,Jo Costa,jo.costa@example.com
+RAW-S-002,,"Delhi, India",2,Aman Rao,aman.rao@example.com
+RAW-S-003,Tier Zero Mills,"Lyon, France",0,Léa Martin,lea.martin@example.com
+RAW-S-004,Tier Four Trims,"Shenzhen, China",4,Tao Li,tao.li@example.com
+RAW-S-005,Text Tier Supplier,"Leicester, UK",Tier 1,Sam Jones,sam.jones@example.com
+RAW-S-006,Bad Email Works,"Prato, Italy",2,Marco Bianchi,marco.bianchi.example.com
+RAW-S-007,Missing Contact Name,"Bursa, Türkiye",2,,valid.person@example.com
+RAW-S-008,Too Long Contact,"Paris, France",1,Alexandra Verylongname Verylongname Verylongname Verylongname Verylongname Verylongname Verylongname Verylongname Verylongname Verylongname Verylongname ,alex.long@example.com
+RAW-S-DUP,Duplicate Supplier One,"Porto, Portugal",1,Ana Silva,ana.silva@example.com
+ raw-s-dup ,Duplicate Supplier Two,"Lisbon, Portugal",2,Ana Silva,ana2.silva@example.com
+RAW-S-011,No Contact Data,"Osaka, Japan",,,
+RAW-S-012,Contact Name Only,"Montreal, Canada",3,Chloé Tremblay,
+RAW-S-013,Uppercase Email Ltd,"Leeds, UK",1,Jamie Fox,JAMIE.FOX@EXAMPLE.ORG
+SUP-PT-001,Existing Lusitano Match,"Braga, Portugal",1,Inês Martins,ines.martins@example.com
+RAW-S-015,Blank Location Supplier,,2,Nora Kim,nora.kim@example.com
+RAW-S-016,Whitespace Email,"Seoul, South Korea",2,Min Seo,min seo@example.com
+RAW-S-017,No Dot Domain,"Toronto, Canada",1,Mina Patel,mina@localhost
+RAW-S-018,Ampersand & Sons Textiles,"Manchester, UK",3,O'Connor Lee,oconnor.lee@example.com

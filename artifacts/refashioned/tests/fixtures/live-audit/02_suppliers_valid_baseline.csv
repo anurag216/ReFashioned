@@ -1,0 +1,16 @@
+﻿supplier_reference,name,location,tier,contact_name,contact_email
+SUP-PT-001,Lusitano Cut & Sew Lda,"Braga, Portugal",1,Inês Martins,ines.martins@example.com
+SUP-IN-002,Deccan Organic Fibres Pvt Ltd,"Maharashtra, India",2,Arjun Mehta,arjun.mehta@example.com
+SUP-TR-003,Anatolia Dye Works A.Ş.,"Bursa, Türkiye",2,Selin Kaya,selin.kaya@example.com
+SUP-IT-004,Tessitura Verde S.p.A.,"Prato, Italy",2,Giulia Conti,giulia.conti@example.com
+SUP-ES-005,Iberia Denim Laundry S.L.,"Valencia, Spain",1,Mateo Ruiz,mateo.ruiz@example.com
+SUP-BD-006,Meghna Apparel Ltd.,"Dhaka, Bangladesh",1,Nadia Rahman,nadia.rahman@example.com
+SUP-VN-007,Saigon Performance Knits Co.,"Ho Chi Minh City, Vietnam",1,Linh Nguyen,linh.nguyen@example.com
+SUP-CN-008,Suzhou Trim & Packaging Co.,"Suzhou, China",3,Wei Chen,wei.chen@example.com
+SUP-FR-009,Atelier Circulaire SAS,"Roubaix, France",1,Camille Bernard,camille.bernard@example.com
+SUP-MA-010,Atlas Weaving Cooperative,"Casablanca, Morocco",2,Yasmine El Idrissi,yasmine.idrissi@example.com
+SUP-RO-011,Transylvanian Wool Mill SRL,"Cluj-Napoca, Romania",2,Andrei Popescu,andrei.popescu@example.com
+SUP-IN-012,Tamil Knit Processing,"Tiruppur, India",2,Kavya Raman,kavya.raman@example.com
+SUP-PT-013,Porto Footwear Components,"Porto, Portugal",2,Rui Almeida,rui.almeida@example.com
+SUP-DE-014,Rheinland Logistics GmbH,"Hamburg, Germany",3,,
+SUP-JP-015,Kinu Accessory Works,"Kyoto, Japan",3,Aiko Mori,AIKO.MORI@EXAMPLE.COM

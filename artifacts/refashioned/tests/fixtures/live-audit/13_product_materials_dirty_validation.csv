@@ -1,0 +1,25 @@
+﻿product_sku,material_name,composition_percentage,certification_required
+RF-TEE-018,TENCEL™ lyocell,20,false
+NO-SUCH-SKU,Cotton,50,false
+,Cotton,50,false
+RF-TEE-018,,10,false
+RF-TEE-018,Modal,,false
+RF-TEE-018,Polyamide,0,false
+RF-TEE-018,Acrylic,-5,false
+RF-TEE-018,Wool,101,false
+RF-TEE-018,Cashmere,ten,false
+RF-TEE-018,Ramie,"12,5",false
+RF-TEE-018,Bamboo viscose,5,TRUEE
+RF-TEE-018,Acetate,5,maybe
+RF-TEE-018,Recycled cotton,5,false
+ rf-tee-018 , recycled cotton ,5,false
+RF-TEE-001,Organic cotton,1,false
+RF-SHO-009,Cork,10,false
+RF-SHO-009,Water-based adhesive,5,Yes
+RF-TRS-012,Elastomultiester,5,
+RF-KNT-003,Recycled acrylic,10e0,false
+RF-TEE-018,"Recycled fibre, post-consumer",2.5,true
+RF-TEE-018,Hemp,33.333,1
+RF-TEE-018,Nylon,5,tru
+RF-TEE-018,Polyester,5,TRUE
+RF-TEE-018,Flax,5,0

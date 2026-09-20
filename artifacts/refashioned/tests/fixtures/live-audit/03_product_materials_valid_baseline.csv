@@ -1,0 +1,36 @@
+﻿product_sku,material_name,composition_percentage,certification_required
+RF-TEE-001,Organic cotton,95,true
+RF-TEE-001,Elastane,5,no
+RF-JKT-002,Recycled polyester,82,yes
+RF-JKT-002,Polyester,13,false
+RF-JKT-002,Elastane,5,0
+RF-KNT-003,Merino wool,70,1
+RF-KNT-003,Recycled nylon,25,false
+RF-SHT-004,Linen,100,yes
+RF-DNM-005,Cotton,78,false
+RF-DNM-005,Recycled cotton,20,true
+RF-DNM-005,Elastane,2,0
+RF-ACT-006,Recycled nylon,74,true
+RF-ACT-006,Elastane,26,false
+RF-KID-007,Cotton,80,false
+RF-KID-007,Recycled polyester,20,yes
+RF-BAG-008,Cotton canvas,90,false
+RF-BAG-008,Recycled polyester lining,10,yes
+RF-SHO-009,Bio-based polyurethane,45,yes
+RF-SHO-009,Recycled polyester,30,true
+RF-SHO-009,Natural rubber,20,no
+RF-ACC-010,Silk,60,true
+RF-ACC-010,Viscose,40,yes
+RF-OVR-011,Cotton,70,false
+RF-OVR-011,Hemp,30,true
+RF-TRS-012,Recycled polyamide,50,yes
+RF-TRS-012,Organic cotton,45,true
+RF-TNK-013,Organic cotton,95,yes
+RF-TNK-013,Elastane,5,0
+RF-HAT-014,Recycled polyester,100,true
+RF-JOG-015,Cotton,85,false
+RF-JOG-015,Recycled polyester,15,true
+RF-DNM-016,Cotton,100,false
+RF-SHT-017,Linen,55,yes
+RF-SHT-017,Viscose,45,no
+RF-TEE-018,Cotton,80,

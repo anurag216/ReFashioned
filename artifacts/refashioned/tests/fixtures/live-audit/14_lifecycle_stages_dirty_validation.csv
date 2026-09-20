@@ -1,0 +1,25 @@
+﻿product_sku,supplier_reference,stage_name,stage_order,co2_impact_kg,water_usage_l
+RF-TEE-018,SUP-PT-001,Cut & sew,3,,
+NO-SUCH-SKU,SUP-PT-001,Assembly,1,1.0,20
+,SUP-PT-001,Assembly,1,1.0,20
+RF-TEE-018,NO-SUCH-SUP,Assembly,4,1.0,20
+RF-TEE-018,,Assembly,5,1.0,20
+RF-TEE-018,SUP-PT-001,,6,1.0,20
+RF-TEE-018,SUP-PT-001,Packaging,,0.1,1
+RF-TEE-018,SUP-PT-001,Packaging,0,0.1,1
+RF-TEE-018,SUP-PT-001,Packaging,-1,0.1,1
+RF-TEE-018,SUP-PT-001,Packaging,one,0.1,1
+RF-TEE-018,SUP-PT-001,Distribution,7,-0.01,1
+RF-TEE-018,SUP-PT-001,Distribution,8,unknown,1
+RF-TEE-018,SUP-PT-001,Distribution,9,0.2,-1
+RF-TEE-018,SUP-PT-001,Distribution,10,0.2,"1,200"
+RF-TEE-018,SUP-PT-001,Zero-impact placeholder,11,0,0
+RF-TEE-018,SUP-PT-001,Huge-value anomaly,12,999999,9000000
+RF-TEE-001,SUP-IN-002,Duplicate existing stage,1,1.9,2100
+RF-SHT-004,SUP-PT-001,Duplicate file A,9,0.4,10
+ rf-sht-004 ,SUP-FR-009,Duplicate file B,9,0.5,11
+RF-TEE-018,SUP-PT-001,Order formatting A,1,0.3,5
+RF-TEE-018,SUP-PT-001,Order formatting B,01,0.4,6
+RF-TEE-018,SUP-DE-014,"Warehouse, consolidation & freight",13,1.2e1,250
+RF-TEE-018,SUP-DE-014,Stage order decimal,1.0,0.2,5
+RF-TEE-018,SUP-FR-009,Unicode – réparation & tri,14,,15
