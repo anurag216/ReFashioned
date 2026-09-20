@@ -25,7 +25,42 @@ export function requireAdminEnvironment() {
   return { email, password };
 }
 
+export async function installHostingIsolation(page: Page) {
+  await page.addInitScript(() => {
+    const suppress = () => {
+      const widget = document.getElementById("replit-agent-inbox-widget");
+      if (widget instanceof HTMLElement) {
+        widget.style.setProperty("display", "none", "important");
+        widget.style.setProperty("pointer-events", "none", "important");
+        widget.setAttribute("aria-hidden", "true");
+      }
+    };
+
+    const start = () => {
+      suppress();
+      if (!document.documentElement) {
+        window.setTimeout(start, 0);
+        return;
+      }
+      const observer = new MutationObserver(suppress);
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    };
+
+    start();
+  });
+}
+
 export async function dismissHostingFeedback(page: Page) {
+  await page.locator("#replit-agent-inbox-widget").evaluateAll(elements => {
+    for (const element of elements) {
+      if (element instanceof HTMLElement) {
+        element.style.setProperty("display", "none", "important");
+        element.style.setProperty("pointer-events", "none", "important");
+        element.setAttribute("aria-hidden", "true");
+      }
+    }
+  }).catch(() => undefined);
+
   const feedback = page.getByText("Share your feedback", { exact: true }).first();
   const visible = await feedback.isVisible().catch(() => false);
   if (!visible) return;
@@ -64,7 +99,9 @@ export async function dismissHostingFeedback(page: Page) {
 
 export async function loginAsAdmin(page: Page) {
   const { email, password } = requireAdminEnvironment();
+  await installHostingIsolation(page);
   await page.goto("/");
+  await dismissHostingFeedback(page);
   await page.getByPlaceholder("you@company.com").fill(email);
   await page.getByPlaceholder("••••••••").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
