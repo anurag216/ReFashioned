@@ -25,6 +25,43 @@ export function requireAdminEnvironment() {
   return { email, password };
 }
 
+export async function dismissHostingFeedback(page: Page) {
+  const feedback = page.getByText("Share your feedback", { exact: true }).first();
+  const visible = await feedback.isVisible().catch(() => false);
+  if (!visible) return;
+
+  const candidates = [
+    page.getByRole("button", { name: /^Close$/i }).first(),
+    page.locator('button[aria-label="Close"], button[title="Close"]').first(),
+  ];
+
+  for (const candidate of candidates) {
+    if (await candidate.isVisible().catch(() => false)) {
+      await candidate.click({ force: true }).catch(() => undefined);
+      if (!(await feedback.isVisible().catch(() => false))) return;
+    }
+  }
+
+  // Replit can inject a fixed feedback card into the deployed page. Remove only
+  // the smallest fixed/absolute ancestor of the exact feedback heading so the
+  // audit measures Re:Fashioned rather than hosting-provider chrome.
+  await page.evaluate(() => {
+    const heading = [...document.querySelectorAll<HTMLElement>("*")]
+      .find(el => (el.textContent ?? "").trim() === "Share your feedback");
+    if (!heading) return;
+    let node: HTMLElement | null = heading;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      if ((style.position === "fixed" || style.position === "absolute") && rect.width <= 700 && rect.height <= 700) {
+        node.remove();
+        return;
+      }
+      node = node.parentElement;
+    }
+  });
+}
+
 export async function loginAsAdmin(page: Page) {
   const { email, password } = requireAdminEnvironment();
   await page.goto("/");
@@ -32,6 +69,7 @@ export async function loginAsAdmin(page: Page) {
   await page.getByPlaceholder("••••••••").fill(password);
   await page.getByRole("button", { name: /sign in/i }).click();
   await page.waitForURL("**/dashboard", { timeout: 45_000 });
+  await dismissHostingFeedback(page);
   await expect(page.getByRole("heading", { name: /pilot readiness/i })).toBeVisible();
 }
 
@@ -60,6 +98,7 @@ function slug(input: string) {
 }
 
 export async function saveControlInventory(page: Page, testInfo: TestInfo, route: string) {
+  await dismissHostingFeedback(page);
   const inventory = await page.evaluate(() => {
     const text = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
     const controls = [...document.querySelectorAll("a,button,input,select,textarea,[role='button'],[role='tab'],[role='menuitem']")]
@@ -108,6 +147,7 @@ export async function saveControlInventory(page: Page, testInfo: TestInfo, route
 }
 
 export async function collectBasicAccessibilityIssues(page: Page) {
+  await dismissHostingFeedback(page);
   return page.evaluate(() => {
     const issues: { type: string; detail: string }[] = [];
     const visible = (el: HTMLElement) => Boolean(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
