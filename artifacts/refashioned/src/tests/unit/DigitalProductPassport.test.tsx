@@ -10,7 +10,7 @@ vi.mock("../../lib/supabaseClient", () => ({ supabase: { rpc: mocks.rpc, from: m
 const slug = "a".repeat(64);
 const preview = { schema_version: 2 as const, brand: { name: "Published Brand" }, product: { name: "Real Product", identifier: "REAL" }, materials: [], impact: {}, lifecycle: [], certifications: [] };
 const state = (changes = false, published = false) => [{ public_slug: slug, is_published: published, published_at: published ? "2026-08-08" : null, payload_generated_at: "2026-08-08", stored_payload_hash: "x", current_payload_hash: changes ? "y" : "x", has_unpublished_changes: changes }];
-function setupData(changes = false, published = false) {
+function setupData(changes = false, published = false, readiness: { blocker_count: number; blockers: string[]; dpp_state: string } | null = { blocker_count: 0, blockers: [], dpp_state: "ready_to_publish" }) {
   mocks.from.mockImplementation((table: string) => {
     const chain = { select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(), order: vi.fn() };
     chain.select.mockReturnValue(chain); chain.eq.mockReturnValue(chain);
@@ -20,6 +20,7 @@ function setupData(changes = false, published = false) {
   mocks.rpc.mockImplementation(async (name: string) => {
     if (name === "get_product_passport_preview") return { data: preview, error: null };
     if (name === "get_product_passport_publication_state") return { data: state(changes, published), error: null };
+    if (name === "get_product_workspace") return { data: readiness ? { readiness } : null, error: readiness ? null : { message: "readiness unavailable" } };
     if (name === "publish_product_passport") return { data: [{ public_slug: slug }], error: null };
     if (name === "rotate_product_passport_slug") return { data: "b".repeat(64), error: null };
     if (name === "get_public_product_passport") return { data: { schema_version: 2, published_at: "2026-08-08", payload_generated_at: "2026-08-08", payload: preview }, error: null };
@@ -36,6 +37,25 @@ describe("DigitalProductPassport publication controls", () => {
     expect(screen.queryByText("EcoFibers Cooperative Ltd.")).not.toBeInTheDocument(); unmount();
     mocks.role = "manager"; setupData(); render(<DigitalProductPassport onBack={vi.fn()} />);
     await screen.findByText("Real Product"); expect(screen.queryByText("Publish Passport")).not.toBeInTheDocument();
+  });
+  it("fails closed and disables publication when readiness has blockers or cannot be verified", async () => {
+    vi.clearAllMocks();
+    setupData(false, false, { blocker_count: 2, blockers: ["Material composition must total 100%", "Every lifecycle stage requires approved, clean, fingerprinted evidence"], dpp_state: "draft" });
+    const { unmount } = render(<DigitalProductPassport onBack={vi.fn()} />);
+    const blockedPublish = await screen.findByRole("button", { name: "Publish Passport" });
+    expect(blockedPublish).toBeDisabled();
+    expect(screen.getByText("Resolve readiness blockers before publication")).toBeInTheDocument();
+    expect(screen.getByText("Material composition must total 100%")).toBeInTheDocument();
+    fireEvent.click(blockedPublish);
+    expect(mocks.rpc.mock.calls.some(call => call[0] === "publish_product_passport")).toBe(false);
+    unmount();
+
+    vi.clearAllMocks();
+    setupData(false, false, null);
+    render(<DigitalProductPassport onBack={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Publish Passport" })).toBeDisabled();
+    expect(screen.getByText("Readiness unavailable")).toBeInTheDocument();
+    expect(mocks.rpc.mock.calls.some(call => call[0] === "publish_product_passport")).toBe(false);
   });
   it("publishes through the RPC and refreshes publication state", async () => {
     render(<DigitalProductPassport onBack={vi.fn()} />); fireEvent.click(await screen.findByText("Publish Passport"));
