@@ -1,11 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { APP_ROUTES, collectBasicAccessibilityIssues, loginAsAdmin, saveControlInventory } from "./helpers";
+import { APP_ROUTES, collectBasicAccessibilityIssues, dismissHostingFeedback, loginAsAdmin, saveControlInventory } from "./helpers";
 
 test.describe("responsive and practical accessibility audit", () => {
   for (const [label, route, heading] of APP_ROUTES) {
     test(`[responsive-a11y][Medium] ${label} has no critical basic accessibility or viewport issue`, async ({ page }, testInfo) => {
       await loginAsAdmin(page);
       await page.goto(route);
+      await dismissHostingFeedback(page);
       await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
       await saveControlInventory(page, testInfo, `responsive-${label}-${route}`);
       const issues = await collectBasicAccessibilityIssues(page);
@@ -21,6 +22,7 @@ test.describe("responsive and practical accessibility audit", () => {
   test("[responsive-a11y][Medium] keyboard focus reaches interactive controls", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto("/dashboard");
+    await dismissHostingFeedback(page);
     const seen = new Set<string>();
     for (let i = 0; i < 18; i += 1) {
       await page.keyboard.press("Tab");
@@ -38,6 +40,7 @@ test.describe("responsive and practical accessibility audit", () => {
     test.skip(testInfo.project.name === "desktop-chromium", "mobile/tablet only");
     await loginAsAdmin(page);
     await page.goto("/dashboard");
+    await dismissHostingFeedback(page);
     await page.getByRole("button", { name: "Open navigation" }).click();
     await expect(page.getByRole("dialog", { name: "Application navigation" })).toBeVisible();
     await page.getByRole("button", { name: "Close navigation" }).first().click();
