@@ -1,0 +1,111 @@
+name: Comprehensive Live Pilot QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Deployed Re:Fashioned URL to audit
+        required: true
+        default: https://re-fashioned--anuragncu.replit.app
+        type: string
+      allow_destructive:
+        description: Import/create synthetic QA data in the disposable live QA tenant
+        required: true
+        default: false
+        type: boolean
+  schedule:
+    - cron: "17 2 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refashioned-live-pilot-qa
+  cancel-in-progress: false
+
+jobs:
+  live-pilot-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://re-fashioned--anuragncu.replit.app' }}
+      PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
+      PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+      QA_ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive || 'false' }}
+      QA_RUN_KEY: gha-${{ github.run_id }}-${{ github.run_attempt }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify live QA configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${PLAYWRIGHT_BASE_URL:?PLAYWRIGHT_BASE_URL is required}"
+          : "${PLAYWRIGHT_ADMIN_EMAIL:?PLAYWRIGHT_ADMIN_EMAIL secret is required}"
+          : "${PLAYWRIGHT_ADMIN_PASSWORD:?PLAYWRIGHT_ADMIN_PASSWORD secret is required}"
+          echo "Target: $PLAYWRIGHT_BASE_URL"
+          echo "Synthetic destructive mode: $QA_ALLOW_DESTRUCTIVE"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --dir artifacts/refashioned exec playwright install --with-deps chromium
+
+      - name: Wait for deployed application
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --max-time 10 "$PLAYWRIGHT_BASE_URL" >/dev/null; then
+              echo "Application is reachable."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Deployed application did not become reachable." >&2
+          exit 1
+
+      - name: Run comprehensive live browser audit
+        id: live_audit
+        continue-on-error: true
+        run: pnpm --dir artifacts/refashioned exec playwright test --config=playwright.audit.config.ts
+
+      - name: Publish QA summary to workflow run
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f artifacts/refashioned/test-results/live-audit/QA_REPORT.md ]]; then
+            cat artifacts/refashioned/test-results/live-audit/QA_REPORT.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "# Re:Fashioned Comprehensive Live QA" >> "$GITHUB_STEP_SUMMARY"
+            echo "The audit did not produce its structured report. Inspect job logs and Playwright artifacts." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload comprehensive QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comprehensive-live-qa-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/refashioned/test-results/live-audit/
+            artifacts/refashioned/playwright-report-live-audit/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail workflow when browser audit failed
+        if: always() && steps.live_audit.outcome == 'failure'
+        run: exit 1
