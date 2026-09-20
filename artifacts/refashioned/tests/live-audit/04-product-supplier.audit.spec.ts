@@ -9,10 +9,11 @@ test.describe("live product and supplier operations", () => {
     test.skip(desktopOnly(testInfo), "desktop-only functional audit");
     await loginAsAdmin(page);
     await page.goto("/products");
-    await page.getByRole("button", { name: "Create Product", exact: true }).click();
+    await page.getByRole("button", { name: "Create Product", exact: true }).first().click();
     await expect(page.getByRole("heading", { name: "New Product" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Create Product", exact: true })).toBeDisabled();
-    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    const form = page.locator("form");
+    await expect(form.getByRole("button", { name: "Create Product", exact: true })).toBeDisabled();
+    await form.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("heading", { name: "New Product" })).toHaveCount(0);
   });
 
@@ -23,11 +24,12 @@ test.describe("live product and supplier operations", () => {
     await page.goto("/products");
     const name = `UI QA Product ${runKey}`;
     const sku = `UIQA-${runKey}`.slice(0, 100);
-    await page.getByRole("button", { name: "Create Product", exact: true }).click();
+    await page.getByRole("button", { name: "Create Product", exact: true }).first().click();
+    const form = page.locator("form");
     await page.getByPlaceholder("e.g. Essential Organic Cotton Tee").fill(name);
     await page.getByPlaceholder("e.g. ECT-001").fill(sku);
     await page.getByRole("button", { name: "In Review", exact: true }).click();
-    await page.getByRole("button", { name: "Create Product", exact: true }).click();
+    await form.getByRole("button", { name: "Create Product", exact: true }).click();
     await expect(page.getByText(name, { exact: true })).toBeVisible();
     await page.getByRole("link", { name, exact: true }).click();
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
