@@ -40,14 +40,40 @@ test.describe("live application map and control inventory", () => {
     test.skip(desktopOnly(testInfo), "desktop-only functional audit");
     await loginAsAdmin(page);
     await page.goto("/settings");
-    for (const tab of ["Account", "Team Access", "Privacy & Data"]) {
-      const button = page.getByRole("button", { name: tab, exact: true });
-      if (await button.count()) {
-        await button.click();
-        await expect(button).toBeVisible();
-      }
+
+    const account = page.getByRole("button", { name: "Account", exact: true });
+    await expect(account).toBeVisible();
+
+    const team = page.getByRole("button", { name: "Team Access", exact: true });
+    if (await team.count()) {
+      await team.click();
+      await expect(team).toBeVisible();
     }
-    await expect(page.getByRole("button", { name: /Request account deletion/i })).toBeVisible();
+
+    const privacy = page.getByRole("button", { name: "Privacy & Data", exact: true });
+    await expect(privacy).toBeVisible();
+    await privacy.click();
+    await expect(page.getByRole("heading", { name: "Privacy & Data", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Request account deletion", exact: true })).toBeVisible();
+  });
+
+  test("[navigation][High] Digital Product Passport sidebar link opens a usable state instead of a dead end", async ({ page }, testInfo) => {
+    test.skip(desktopOnly(testInfo), "desktop-only functional audit");
+    await loginAsAdmin(page);
+    await page.getByRole("link", { name: "Digital Product Passport", exact: true }).click();
+    await expect(page).toHaveURL(/\/passport/);
+    await expect(page.getByText("Product not found or passport preview unavailable.")).toHaveCount(0);
+  });
+
+  test("[navigation][High] CSRD Product Catalog CTA routes to the current product catalog", async ({ page }, testInfo) => {
+    test.skip(desktopOnly(testInfo), "desktop-only functional audit");
+    await loginAsAdmin(page);
+    await page.goto("/reports/csrd");
+    const cta = page.getByRole("link", { name: "Open Product Catalog", exact: true });
+    if (!(await cta.count())) test.skip(true, "Current live tenant has no CSRD blocker CTA to exercise");
+    await cta.click();
+    await expect(page).toHaveURL(/\/products$/);
+    await expect(page.getByRole("heading", { name: "Product Catalog" })).toBeVisible();
   });
 
   test("[products][Medium] product search handles empty-result and recovery", async ({ page }, testInfo) => {
