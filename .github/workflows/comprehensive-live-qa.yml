@@ -15,6 +15,11 @@ on:
         type: boolean
   schedule:
     - cron: "17 2 * * 1"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/qa-full-live-audit-trigger"
 
 permissions:
   contents: read
@@ -31,7 +36,7 @@ jobs:
       PLAYWRIGHT_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || 'https://re-fashioned--anuragncu.replit.app' }}
       PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
       PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
-      QA_ALLOW_DESTRUCTIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_destructive || 'false' }}
+      QA_ALLOW_DESTRUCTIVE: ${{ github.event_name == 'push' && 'true' || (github.event_name == 'workflow_dispatch' && inputs.allow_destructive || 'false') }}
       QA_RUN_KEY: gha-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
