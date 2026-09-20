@@ -91,6 +91,9 @@ $$;
 COMMENT ON FUNCTION public.publish_product_passport(uuid) IS
   'Admin-only publication. Fails closed whenever authoritative product readiness contains blockers.';
 
+REVOKE ALL ON FUNCTION public.publish_product_passport(uuid) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.publish_product_passport(uuid) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.rollback_lifecycle_stage_without_evidence(p_stage_id uuid)
 RETURNS void
 LANGUAGE plpgsql
