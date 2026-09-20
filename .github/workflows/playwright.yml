@@ -38,6 +38,12 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+      - name: Parse comprehensive live QA suite
+        env:
+          PLAYWRIGHT_BASE_URL: https://example.invalid
+          QA_ALLOW_DESTRUCTIVE: "false"
+        run: pnpm --dir artifacts/refashioned exec playwright test --list --config=playwright.audit.config.ts
+
       - name: Run unit tests
         run: pnpm test
 
