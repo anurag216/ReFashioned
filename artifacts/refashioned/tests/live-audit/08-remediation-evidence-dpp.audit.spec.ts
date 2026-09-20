@@ -132,13 +132,17 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     const publish = page.getByRole("button", { name: /Publish Passport|Publish updates/ }).first();
     if (!(await publish.count())) test.skip(true, "Passport is not in a publishable UI state for this scenario");
 
-    await publish.click();
-    await page.waitForTimeout(1_000);
-    const body = await page.locator("body").innerText();
-    expect(body).not.toContain("Passport snapshot published.");
-    expect(body).not.toContain("View live passport");
-
-    const unpublish = page.getByRole("button", { name: "Unpublish" });
-    if (await unpublish.count()) await unpublish.click();
+    try {
+      await publish.click();
+      await page.waitForTimeout(1_000);
+      const body = await page.locator("body").innerText();
+      expect(body).not.toContain("Passport snapshot published.");
+      expect(body).not.toContain("View live passport");
+    } finally {
+      const unpublish = page.getByRole("button", { name: "Unpublish" });
+      if (await unpublish.count()) {
+        await unpublish.click().catch(() => undefined);
+      }
+    }
   });
 });

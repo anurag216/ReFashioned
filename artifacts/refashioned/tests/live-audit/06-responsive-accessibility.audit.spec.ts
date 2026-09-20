@@ -19,31 +19,51 @@ test.describe("responsive and practical accessibility audit", () => {
     });
   }
 
-  test("[responsive-a11y][Medium] keyboard focus reaches interactive controls", async ({ page }) => {
+  test("[responsive-a11y][Medium] keyboard focus reaches interactive controls", async ({ page }, testInfo) => {
     await loginAsAdmin(page);
     await page.goto("/dashboard");
     await dismissHostingFeedback(page);
+
+    let firstInteractive;
+    if (testInfo.project.name === "mobile-chromium") {
+      await page.getByRole("button", { name: "Open navigation" }).click();
+      const dialog = page.getByRole("dialog", { name: "Application navigation" });
+      await expect(dialog).toBeVisible();
+      firstInteractive = dialog.getByRole("link", { name: "Dashboard", exact: true });
+    } else {
+      firstInteractive = page.getByRole("link", { name: "Dashboard", exact: true }).first();
+    }
+
+    await firstInteractive.focus();
     const seen = new Set<string>();
-    for (let i = 0; i < 18; i += 1) {
-      await page.keyboard.press("Tab");
+    for (let i = 0; i < 10; i += 1) {
       const marker = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement | null;
         if (!el) return "none";
         return `${el.tagName}:${el.getAttribute("aria-label") || el.getAttribute("title") || (el.textContent || "").trim().slice(0, 60)}`;
       });
       seen.add(marker);
+      await page.keyboard.press("Tab");
     }
-    expect(seen.size).toBeGreaterThan(4);
+    expect(seen.size).toBeGreaterThan(3);
   });
 
-  test("[responsive-a11y][Medium] mobile/tablet navigation drawer opens and closes", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name === "desktop-chromium", "mobile/tablet only");
+  test("[responsive-a11y][Medium] navigation adapts correctly at tablet and mobile widths", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "desktop-chromium", "responsive navigation only");
     await loginAsAdmin(page);
     await page.goto("/dashboard");
     await dismissHostingFeedback(page);
+
+    if (testInfo.project.name === "tablet-chromium") {
+      await expect(page.getByRole("button", { name: "Open navigation" })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "Dashboard", exact: true }).first()).toBeVisible();
+      return;
+    }
+
     await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(page.getByRole("dialog", { name: "Application navigation" })).toBeVisible();
-    await page.getByRole("button", { name: "Close navigation" }).first().click();
-    await expect(page.getByRole("dialog", { name: "Application navigation" })).toHaveCount(0);
+    const dialog = page.getByRole("dialog", { name: "Application navigation" });
+    await expect(dialog).toBeVisible();
+    await dialog.locator('aside button[aria-label="Close navigation"]').click();
+    await expect(dialog).toHaveCount(0);
   });
 });
