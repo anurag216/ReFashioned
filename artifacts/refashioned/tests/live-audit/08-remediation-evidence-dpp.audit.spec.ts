@@ -1,13 +1,27 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { desktopOnly, loginAsAdmin } from "./helpers";
 
 const allowDestructive = process.env.QA_ALLOW_DESTRUCTIVE === "true";
 const runKey = (process.env.QA_RUN_KEY || "local").replace(/[^a-zA-Z0-9]/g, "").slice(-12) || "local";
 
-async function openSyntheticProduct(page: import("@playwright/test").Page, name: string) {
+async function waitForOption(select: Locator, name: string) {
+  await expect(select).toBeVisible();
+  await expect.poll(
+    async () => select.locator("option", { hasText: name }).count(),
+    { timeout: 30_000, message: `Waiting for product option: ${name}` },
+  ).toBeGreaterThan(0);
+  return select.locator("option", { hasText: name }).first();
+}
+
+async function openSyntheticProduct(page: Page, name: string) {
   await page.goto("/products");
+  await expect(page.getByRole("heading", { name: "Product Catalog" })).toBeVisible();
   const link = page.getByRole("link", { name, exact: true });
-  if (!(await link.count())) return false;
+  try {
+    await expect(link).toBeVisible({ timeout: 30_000 });
+  } catch {
+    return false;
+  }
   await link.click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   return true;
@@ -22,11 +36,16 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     const productName = `UI QA Product ${runKey}`;
     await page.goto("/traceability");
     const select = page.getByTestId("select-product");
-    const matching = select.locator("option", { hasText: productName });
-    if (!(await matching.count())) test.skip(true, "Synthetic empty product is unavailable; product creation test may have been blocked");
-    const value = await matching.first().getAttribute("value");
+    let matching: Locator;
+    try {
+      matching = await waitForOption(select, productName);
+    } catch {
+      test.skip(true, "Synthetic empty product is unavailable; product creation test may have been blocked");
+      return;
+    }
+    const value = await matching.getAttribute("value");
     if (!value) test.skip(true, "Synthetic product option has no id");
-    await select.selectOption(value);
+    await select.selectOption(value!);
     await expect(page.getByText("0 stages tracked")).toBeVisible();
     await expect(page.getByText(/No stages found for this product/i)).toBeVisible();
     await expect(page.getByText(/All clear\. No anomalies detected across the supply chain/i)).toHaveCount(0);
@@ -59,11 +78,16 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     const productName = `Essential Organic Cotton Tee [QA ${runKey}]`;
     await page.goto("/traceability");
     const select = page.getByTestId("select-product");
-    const matching = select.locator("option", { hasText: productName });
-    if (!(await matching.count())) test.skip(true, "Synthetic baseline product is unavailable");
-    const productId = await matching.first().getAttribute("value");
+    let matching: Locator;
+    try {
+      matching = await waitForOption(select, productName);
+    } catch {
+      test.skip(true, "Synthetic baseline product is unavailable");
+      return;
+    }
+    const productId = await matching.getAttribute("value");
     if (!productId) test.skip(true, "Synthetic baseline product has no id");
-    await select.selectOption(productId);
+    await select.selectOption(productId!);
 
     const stageName = `QA Evidence Stage ${runKey}`;
     const fileName = `qa-evidence-${runKey}.pdf`;
@@ -113,7 +137,6 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     expect(body).not.toContain("Passport snapshot published.");
     expect(body).not.toContain("View live passport");
 
-    // If a regression did publish it, restore the disposable QA record after recording the failure.
     const unpublish = page.getByRole("button", { name: "Unpublish" });
     if (await unpublish.count()) await unpublish.click();
   });
