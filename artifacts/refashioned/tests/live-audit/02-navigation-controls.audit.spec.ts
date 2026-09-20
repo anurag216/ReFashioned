@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { APP_ROUTES, assertNoFatalTelemetry, attachRuntimeTelemetry, desktopOnly, loginAsAdmin, saveControlInventory } from "./helpers";
+import { APP_ROUTES, assertNoFatalTelemetry, attachRuntimeTelemetry, desktopOnly, dismissHostingFeedback, loginAsAdmin, saveControlInventory } from "./helpers";
 
 test.describe("live application map and control inventory", () => {
   test("[navigation][High] every primary application route loads and is inventoried", async ({ page }, testInfo) => {
@@ -40,14 +40,22 @@ test.describe("live application map and control inventory", () => {
     test.skip(desktopOnly(testInfo), "desktop-only functional audit");
     await loginAsAdmin(page);
     await page.goto("/settings");
-    for (const tab of ["Account", "Team Access", "Privacy & Data"]) {
-      const button = page.getByRole("button", { name: tab, exact: true });
-      if (await button.count()) {
-        await button.click();
-        await expect(button).toBeVisible();
-      }
+    await dismissHostingFeedback(page);
+
+    const accountTab = page.getByRole("button", { name: "Account", exact: true });
+    await accountTab.click();
+    await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+
+    const teamTab = page.getByRole("button", { name: "Team Access", exact: true });
+    if (await teamTab.count()) {
+      await teamTab.click();
+      await expect(page.getByText(/team|member|access/i).first()).toBeVisible();
     }
-    await expect(page.getByRole("button", { name: /Request account deletion/i })).toBeVisible();
+
+    const privacyTab = page.getByRole("button", { name: "Privacy & Data", exact: true });
+    await privacyTab.click();
+    await expect(page.getByRole("heading", { name: "Privacy & Data", exact: true })).toBeVisible();
+    await expect(page.getByText(/removal of your account access and personal identity/i)).toBeVisible();
   });
 
   test("[products][Medium] product search handles empty-result and recovery", async ({ page }, testInfo) => {
