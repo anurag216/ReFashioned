@@ -126,7 +126,8 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     const blockerText = await page.getByText(/blocker/).first().innerText();
     if (/^0\s+blocker/i.test(blockerText)) test.skip(true, "Synthetic product unexpectedly has no readiness blockers");
 
-    await dismissHostingFeedback(page);\n    await page.getByRole("link", { name: "Open DPP" }).click();
+    await dismissHostingFeedback(page);
+    await page.getByRole("link", { name: "Open DPP" }).click();
     await expect(page.getByText("Publication status")).toBeVisible();
     const publish = page.getByRole("button", { name: /Publish Passport|Publish updates/ }).first();
     if (!(await publish.count())) test.skip(true, "Passport is not in a publishable UI state for this scenario");
