@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { desktopOnly, loginAsAdmin } from "./helpers";
+import { desktopOnly, dismissHostingFeedback, loginAsAdmin } from "./helpers";
 
 const allowDestructive = process.env.QA_ALLOW_DESTRUCTIVE === "true";
 const runKey = (process.env.QA_RUN_KEY || "local").replace(/[^a-zA-Z0-9]/g, "").slice(-12) || "local";
@@ -94,7 +94,7 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     await page.getByRole("button", { name: "Add Stage" }).click();
     await page.getByPlaceholder("e.g. Raw Material Sourcing").fill(stageName);
     await page.getByPlaceholder("e.g. Maharashtra, India").fill("Synthetic QA Facility");
-    await page.getByPlaceholder("1").fill("99");
+    await page.getByPlaceholder("1", { exact: true }).fill("99");
 
     const pdf = Buffer.from(
       "%PDF-1.4\n1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n2 0 obj<< /Type /Pages /Count 0 >>endobj\ntrailer<< /Root 1 0 R >>\n%%EOF\n",
@@ -126,7 +126,7 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     const blockerText = await page.getByText(/blocker/).first().innerText();
     if (/^0\s+blocker/i.test(blockerText)) test.skip(true, "Synthetic product unexpectedly has no readiness blockers");
 
-    await page.getByRole("link", { name: "Open DPP" }).click();
+    await dismissHostingFeedback(page);\n    await page.getByRole("link", { name: "Open DPP" }).click();
     await expect(page.getByText("Publication status")).toBeVisible();
     const publish = page.getByRole("button", { name: /Publish Passport|Publish updates/ }).first();
     if (!(await publish.count())) test.skip(true, "Passport is not in a publishable UI state for this scenario");
