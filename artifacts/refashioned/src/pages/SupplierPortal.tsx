@@ -35,6 +35,8 @@ export function SupplierPortal() {
   const [addForm, setAddForm] = useState({ name: "", location: "", tier: "1", status: "active" as "active" | "inactive" | "under_review" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [accessRows, setAccessRows] = useState<SupplierAccessAdminRow[]>([]);
   const [accessLoading, setAccessLoading] = useState(false);
@@ -47,6 +49,18 @@ export function SupplierPortal() {
 
   const { data: suppliers = [], isLoading: loading, error: fetchErrorObj, refetch } = useSuppliers();
   const fetchError = fetchErrorObj instanceof Error ? fetchErrorObj.message : null;
+
+  async function syncSuppliers() {
+    setSyncing(true);
+    setSyncMessage(null);
+    const result = await refetch();
+    setSyncing(false);
+    if (result.error) {
+      setSyncMessage("Supplier data could not be refreshed. Try again.");
+      return;
+    }
+    setSyncMessage("Supplier data refreshed.");
+  }
 
   async function loadAccessAdmin(supplierId: string) {
     if (!supabase) return;
@@ -232,6 +246,7 @@ export function SupplierPortal() {
           <input
             data-testid="input-supplier-search"
             type="text"
+            aria-label="Search suppliers"
             placeholder="Search suppliers..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -258,9 +273,17 @@ export function SupplierPortal() {
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             {loading ? "Loading…" : `${filteredSuppliers.length} suppliers`}
           </span>
-          <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <RefreshCcw className="w-3.5 h-3.5" /> Sync data
-          </button>
+          <div className="flex items-center gap-3">
+            {syncMessage && <span role="status" className="text-xs text-muted-foreground">{syncMessage}</span>}
+            <button
+              type="button"
+              disabled={syncing}
+              onClick={() => { void syncSuppliers(); }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <RefreshCcw className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`} /> {syncing ? "Syncing…" : "Sync data"}
+            </button>
+          </div>
         </div>
 
         {/* Loading spinner */}
