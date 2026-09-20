@@ -25,6 +25,26 @@ test.describe("sustainability truthfulness, reporting and public boundaries", ()
     await expect(page.getByText(/not legal advice|not.*determination of CSRD compliance/i)).toBeVisible();
   });
 
+  test("[truthfulness][Critical] dashboard never presents missing environmental observations as zero", async ({ page }, testInfo) => {
+    test.skip(desktopOnly(testInfo), "desktop-only functional audit");
+    await loginAsAdmin(page);
+    await page.goto("/dashboard");
+    const body = await page.locator("body").innerText();
+    const explicitlyMissing = /No lifecycle impact data has been recorded yet/i.test(body);
+    if (explicitlyMissing) {
+      expect(body).not.toMatch(/0\s*·\s*No data yet/i);
+    }
+  });
+
+  test("[truthfulness][Critical] supplier onboarding coverage is derived from records, not a fixed pilot percentage", async ({ page }, testInfo) => {
+    test.skip(desktopOnly(testInfo), "desktop-only functional audit");
+    await loginAsAdmin(page);
+    await page.goto("/suppliers");
+    const body = await page.locator("body").innerText();
+    expect(body).not.toContain("Current coverage: 60%");
+    expect(body).not.toContain("2 of 3 suppliers complete");
+  });
+
   test("[truthfulness][Critical] product workspace never renders literal zero for unknown CO2/water labels", async ({ page }, testInfo) => {
     test.skip(desktopOnly(testInfo), "desktop-only functional audit");
     await loginAsAdmin(page);
