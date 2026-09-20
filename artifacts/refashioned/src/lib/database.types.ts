@@ -1507,6 +1507,10 @@ export type Database = {
           published_at: string
         }[]
       }
+      rollback_lifecycle_stage_without_evidence: {
+        Args: { p_stage_id: string }
+        Returns: undefined
+      }
       record_evidence_scan_result: {
         Args: {
           p_content_sha256: string
