@@ -1,0 +1,19 @@
+﻿name,sku,season,status
+,RAW-P-001,SS27,draft
+No SKU Product,,SS27,draft
+Whitespace Name,RAW-P-003,SS27,active
+Case Normalization,RAW-P-004,AW27,IN_REVIEW
+Duplicate A,RAW-P-DUP,SS27,draft
+Duplicate B, raw-p-dup ,AW27,draft
+Very Long SKU,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX,SS27,draft
+Blank Status Defaults,RAW-P-008,SS27,
+Leading and trailing spaces,  RAW-P-009  ,  AW27  , Draft 
+   ,RAW-P-010,SS27,draft
+Whitespace SKU,   ,SS27,draft
+Published Product,RAW-P-012,SS27,published
+"Dress, ""Limited Edition""",RAW-P-013,CAP27,draft
+Écharpe Été Nº 2,RAW-P-014,SS27,draft
+Existing Product Match,RF-TEE-001,SS26,draft
+Lowercase Existing Match,rf-jkt-002,AW26,in_review
+Season Optional,RAW-P-017,,draft
+Long but legitimate product name AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA,RAW-P-018,SS28,draft

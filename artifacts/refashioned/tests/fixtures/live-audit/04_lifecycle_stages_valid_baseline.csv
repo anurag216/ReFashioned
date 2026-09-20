@@ -1,0 +1,42 @@
+﻿product_sku,supplier_reference,stage_name,stage_order,co2_impact_kg,water_usage_l
+RF-TEE-001,SUP-IN-002,Fibre cultivation & ginning,1,1.85,2100
+RF-TEE-001,SUP-IN-012,Spinning & knitting,2,0.92,180
+RF-TEE-001,SUP-PT-001,Cut & sew,3,,
+RF-JKT-002,SUP-VN-007,Fabric knitting,1,2.4,95
+RF-JKT-002,SUP-TR-003,Dyeing & finishing,2,3.15,620
+RF-JKT-002,SUP-PT-001,Cut & sew,3,0.78,24
+RF-JKT-002,SUP-CN-008,Packaging,4,,
+RF-KNT-003,SUP-RO-011,Wool preparation,1,4.8,310
+RF-KNT-003,SUP-IT-004,Yarn spinning,2,,
+RF-KNT-003,SUP-PT-001,Assembly,3,1.1,18
+RF-SHT-004,SUP-MA-010,Flax weaving,1,1.6,120
+RF-SHT-004,SUP-PT-001,Cut & sew,2,0.7,16
+RF-DNM-005,SUP-IT-004,Denim weaving,1,2.9,250
+RF-DNM-005,SUP-ES-005,"Dyeing, wash & finishing",2,3.9,1750
+RF-DNM-005,SUP-PT-001,Cut & sew,3,0.95,28
+RF-ACT-006,SUP-VN-007,Circular knitting,1,2.65,110
+RF-ACT-006,SUP-TR-003,Dyeing & heat setting,2,2.95,480
+RF-ACT-006,SUP-BD-006,Cut & sew,3,,
+RF-KID-007,SUP-IN-012,Knitting,1,1.3,140
+RF-KID-007,SUP-BD-006,Cut & sew,2,0.65,20
+RF-BAG-008,SUP-IN-002,Canvas preparation,1,1.2,90
+RF-BAG-008,SUP-FR-009,Cut & sew,2,,
+RF-SHO-009,SUP-PT-013,Upper & sole components,1,3.6,145
+RF-SHO-009,SUP-PT-013,Assembly,2,2.2,62
+RF-ACC-010,SUP-JP-015,Fabric preparation,1,1.9,410
+RF-ACC-010,SUP-FR-009,Cutting & finishing,2,0.35,8
+RF-OVR-011,SUP-IN-002,Fibre preparation,1,,
+RF-OVR-011,SUP-PT-001,Cut & sew,2,0.88,22
+RF-TRS-012,SUP-IT-004,Weaving,1,2.1,105
+RF-TRS-012,SUP-PT-001,Cut & sew,2,0.72,19
+RF-TNK-013,SUP-IN-012,Knitting,1,1.05,115
+RF-TNK-013,SUP-PT-001,Cut & sew,2,0.48,14
+RF-HAT-014,SUP-VN-007,Fabric production,1,1.7,80
+RF-HAT-014,SUP-CN-008,Assembly & packing,2,,
+RF-JOG-015,SUP-IN-012,French terry knitting,1,1.45,130
+RF-JOG-015,SUP-BD-006,Cut & sew,2,0.72,22
+RF-DNM-016,SUP-IT-004,Denim weaving,1,2.75,235
+RF-DNM-016,SUP-ES-005,Garment wash,2,2.85,1500
+RF-SHT-017,SUP-MA-010,Fabric weaving,1,1.8,125
+RF-SHT-017,SUP-PT-001,Cut & sew,2,0.66,17
+RF-TEE-018,SUP-IN-002,Cotton preparation,2,,
