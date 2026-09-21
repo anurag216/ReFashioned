@@ -60,6 +60,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
   const [saveError, setSaveError] = useState<string | null>(null);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [createdStageId, setCreatedStageId] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) { setProductsLoading(false); return; }
@@ -195,8 +196,42 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     return () => { cancelled = true; };
   }, [selectedProduct, refreshKey]);
 
+  function exportLifecycleCsv() {
+    if (!rows.length) {
+      setActionMessage("There are no lifecycle stages to export for this product.");
+      return;
+    }
+    const escapeCsv = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const header = ["Stage", "Location", "Supplier", "Evidence status", "CO2 impact", "Water usage", "Flagged"];
+    const body = rows.map(row => [
+      row.stage,
+      row.location === "—" ? "" : row.location,
+      row.locSub === "—" ? "" : row.locSub,
+      row.evidence.map(item => item.evidence_status).join(" | "),
+      row.co2Val === "—" ? "" : row.co2Val,
+      row.waterVal === "—" ? "" : row.waterVal,
+      row.flagged ? "true" : "false",
+    ]);
+    const csv = [header, ...body].map(line => line.map(value => escapeCsv(String(value))).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const product = products.find(item => item.id === selectedProduct);
+    link.href = url;
+    link.download = `refashioned-traceability-${(product?.sku || product?.name || selectedProduct || "product").replace(/[^a-zA-Z0-9_-]+/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setActionMessage("Lifecycle export downloaded.");
+  }
+
   async function handleAddStage() {
     if (!addForm.stage_name.trim()) { setSaveError("Stage name is required."); return; }
+    if (certificateFile && !addForm.supplier_id) {
+      setSaveError("Select a supplier before attaching evidence. No stage has been saved.");
+      return;
+    }
     setSaving(true); setSaveError(null);
     const client = supabase;
     if (!client) { setSaveError("Supabase not configured."); setSaving(false); return; }
@@ -221,6 +256,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
     const orgId = (member as any).organization_id as string;
 
     let stageId = createdStageId;
+    let stageCreatedNow = false;
     if (!stageId) {
     const { data: stage, error: insertError } = await client
       .from("lifecycle_stages")
@@ -237,6 +273,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
       } as any).select("id").single();
     if (insertError) { setSaveError(insertError.message); setSaving(false); return; }
     stageId = stage.id;
+    stageCreatedNow = true;
     setCreatedStageId(stage.id);
     setRefreshKey(k => k + 1);
     }
@@ -244,7 +281,23 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
       const result = await uploadEvidenceDocument(client as EvidenceUploadClient, stageId, certificateFile, step => {
         setSavingLabel(step === "authorizing" ? "Authorizing upload…" : step === "uploading" ? "Uploading evidence…" : "Finalizing evidence…");
       });
-      if (result.error) { setSaveError(`Stage saved. ${result.error}`); setSaving(false); return; }
+      if (result.error) {
+        if (stageCreatedNow) {
+          const { error: rollbackError } = await client.rpc("rollback_lifecycle_stage_without_evidence", { p_stage_id: stageId });
+          if (!rollbackError) {
+            setCreatedStageId(null);
+            setRefreshKey(k => k + 1);
+            setSaveError(`${result.error} No lifecycle stage was saved; fix the issue and retry.`);
+          } else {
+            setSaveError(`Stage saved, but evidence did not complete. ${result.error} Reuse this stage rather than creating a duplicate.`);
+          }
+        } else {
+          setSaveError(`Evidence did not complete. ${result.error} Retry on this stage rather than creating a duplicate.`);
+        }
+        setSavingLabel("Saving…");
+        setSaving(false);
+        return;
+      }
     }
     setShowAddModal(false);
     setAddForm({ stage_name: "", subtitle: "", stage_order: "", co2_impact_kg: "", water_usage_l: "", supplier_id: "" });
@@ -287,6 +340,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <select
             data-testid="select-product"
+            aria-label="Select product"
             value={selectedProduct}
             onChange={e => setSelectedProduct(e.target.value)}
             className="bg-white border border-border rounded-md px-3 py-2 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-72"
@@ -307,11 +361,18 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
               <FileCheck className="w-4 h-4" /> View DPP
             </button>
           )}
-          <button className="flex items-center gap-2 bg-accent text-accent-foreground hover:bg-accent/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0">
+          <button
+            type="button"
+            onClick={exportLifecycleCsv}
+            disabled={loading || rows.length === 0}
+            className="flex items-center gap-2 bg-accent text-accent-foreground hover:bg-accent/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0 disabled:opacity-50"
+          >
             <Download className="w-4 h-4" /> Export
           </button>
         </div>
       </div>
+
+      {actionMessage && <p role="status" className="rounded-md border bg-white px-4 py-2 text-sm text-muted-foreground">{actionMessage}</p>}
 
       {/* Copilot / anomaly banner — derived from live flagged column */}
       {!loading && hasFlagged && (
@@ -324,10 +385,16 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
           <button className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm mt-2 sm:mt-0">Review</button>
         </div>
       )}
-      {!loading && !hasFlagged && !fetchError && (
+      {!loading && rows.length > 0 && !hasFlagged && !fetchError && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3 shadow-sm">
           <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
-          <p className="text-sm text-green-800"><span className="font-semibold">All clear.</span> No anomalies detected across the supply chain for this SKU.</p>
+          <p className="text-sm text-green-800"><span className="font-semibold">All clear.</span> No anomalies detected across the recorded supply chain stages for this SKU.</p>
+        </div>
+      )}
+      {!loading && rows.length === 0 && !fetchError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3 shadow-sm">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+          <p className="text-sm text-amber-800"><span className="font-semibold">Not assessed.</span> No lifecycle stages are recorded, so anomaly status is unknown.</p>
         </div>
       )}
       {fetchError && (
@@ -456,14 +523,14 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
               )}
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Stage Name <span className="text-red-500">*</span></label>
-                <input type="text" value={addForm.stage_name}
+                <input type="text" aria-label="Stage name" value={addForm.stage_name}
                   onChange={e => setAddForm(f => ({ ...f, stage_name: e.target.value }))}
                   placeholder="e.g. Raw Material Sourcing"
                   className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Subtitle / Location</label>
-                <input type="text" value={addForm.subtitle}
+                <input type="text" aria-label="Subtitle or location" value={addForm.subtitle}
                   onChange={e => setAddForm(f => ({ ...f, subtitle: e.target.value }))}
                   placeholder="e.g. Maharashtra, India"
                   className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
@@ -471,6 +538,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Supplier</label>
                 <select
+                  aria-label="Supplier"
                   value={addForm.supplier_id}
                   onChange={e => setAddForm(f => ({ ...f, supplier_id: e.target.value }))}
                   className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-white"
@@ -484,21 +552,21 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1">Order</label>
-                  <input type="number" min="0" value={addForm.stage_order}
+                  <input type="number" aria-label="Stage order" min="0" value={addForm.stage_order}
                     onChange={e => setAddForm(f => ({ ...f, stage_order: e.target.value }))}
                     placeholder="1"
                     className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1">CO₂ (kg)</label>
-                  <input type="number" min="0" step="0.1" value={addForm.co2_impact_kg}
+                  <input type="number" aria-label="CO2 impact in kilograms" min="0" step="0.1" value={addForm.co2_impact_kg}
                     onChange={e => setAddForm(f => ({ ...f, co2_impact_kg: e.target.value }))}
                     placeholder="42.3"
                     className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1">Water (L)</label>
-                  <input type="number" min="0" value={addForm.water_usage_l}
+                  <input type="number" aria-label="Water usage in liters" min="0" value={addForm.water_usage_l}
                     onChange={e => setAddForm(f => ({ ...f, water_usage_l: e.target.value }))}
                     placeholder="1800"
                     className="w-full border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
@@ -513,6 +581,7 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
                   </span>
                   <input
                     type="file"
+                    aria-label="Upload certificate evidence"
                     accept="application/pdf,image/*"
                     className="sr-only"
                     onChange={e => setCertificateFile(e.target.files?.[0] ?? null)}

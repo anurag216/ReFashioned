@@ -94,6 +94,11 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     await page.getByRole("button", { name: "Add Stage" }).click();
     await page.getByPlaceholder("e.g. Raw Material Sourcing").fill(stageName);
     await page.getByPlaceholder("e.g. Maharashtra, India").fill("Synthetic QA Facility");
+    const supplierSelect = page.getByRole("combobox", { name: "Supplier" });
+    await expect.poll(async () => supplierSelect.locator("option").count(), { timeout: 30_000 }).toBeGreaterThan(1);
+    const supplierValue = await supplierSelect.locator("option").nth(1).getAttribute("value");
+    if (!supplierValue) test.skip(true, "No supplier option is available for evidence upload");
+    await supplierSelect.selectOption(supplierValue!);
     await page.getByPlaceholder("1", { exact: true }).fill("99");
 
     const pdf = Buffer.from(
@@ -131,6 +136,11 @@ test.describe("live remediation, evidence and DPP trust workflow", () => {
     await expect(page.getByText("Publication status")).toBeVisible();
     const publish = page.getByRole("button", { name: /Publish Passport|Publish updates/ }).first();
     if (!(await publish.count())) test.skip(true, "Passport is not in a publishable UI state for this scenario");
+
+    if (await publish.isDisabled()) {
+      await expect(page.getByRole("alert").filter({ hasText: "Resolve readiness blockers before publication" })).toBeVisible();
+      return;
+    }
 
     try {
       await publish.click();

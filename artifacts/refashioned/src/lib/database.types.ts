@@ -1583,6 +1583,10 @@ export type Database = {
         Args: { p_invitation_id: string }
         Returns: undefined
       }
+      rollback_lifecycle_stage_without_evidence: {
+        Args: { p_stage_id: string }
+        Returns: undefined
+      }
       rotate_product_passport_slug: {
         Args: { p_product_id: string }
         Returns: string

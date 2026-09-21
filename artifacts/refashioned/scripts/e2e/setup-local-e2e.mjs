@@ -230,7 +230,15 @@ assertOk((await client.from("lifecycle_stages").upsert({
 
 // This fixture is independent from the destructive supplier lifecycle test.
 // The browser performs review, certification creation, publication, and
-// revocation; setup supplies only a real pending-review evidence row.
+// revocation; setup supplies a complete material composition plus a real
+// pending-review evidence row so readiness becomes publishable after approval.
+assertOk((await client.from("product_materials").delete().eq("product_id", DPP_TRUST_PRODUCT_ID)).error, "clear DPP certification trust materials");
+assertOk((await client.from("product_materials").insert({
+  product_id: DPP_TRUST_PRODUCT_ID,
+  material_name: "DPP trust cotton",
+  composition_percentage: 100,
+  certification_required: false,
+})).error, "insert DPP certification trust material");
 assertOk((await client.from("digital_product_passports").delete().eq("product_id", DPP_TRUST_PRODUCT_ID)).error, "clear DPP certification trust passport");
 assertOk((await client.from("certifications").delete().eq("evidence_id", DPP_TRUST_EVIDENCE_ID)).error, "clear DPP certification trust certifications");
 assertOk((await client.from("evidence_uploads").delete().eq("id", DPP_TRUST_EVIDENCE_ID)).error, "clear DPP certification trust evidence");

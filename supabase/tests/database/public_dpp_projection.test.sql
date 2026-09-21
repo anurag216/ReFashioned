@@ -19,10 +19,15 @@ INSERT INTO public.products(id,organization_id,name,sku,season) VALUES
  ('93000000-0000-0000-0000-000000000002','91000000-0000-0000-0000-000000000001','No stages',NULL,NULL),
  ('93000000-0000-0000-0000-000000000003','91000000-0000-0000-0000-000000000002','Other tenant',NULL,NULL);
 INSERT INTO public.product_materials(id,product_id,material_name,composition_percentage) VALUES('93100000-0000-0000-0000-000000000001','93000000-0000-0000-0000-000000000001','Cotton',100);
-INSERT INTO public.lifecycle_stages(id,organization_id,product_id,stage_name,stage_order,co2_impact_kg,water_usage_l) VALUES
- ('94000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','93000000-0000-0000-0000-000000000001','Sourcing',1,0,10),
- ('94000000-0000-0000-0000-000000000002','91000000-0000-0000-0000-000000000001','93000000-0000-0000-0000-000000000001','Making',2,2,20),
- ('94000000-0000-0000-0000-000000000003','91000000-0000-0000-0000-000000000002','93000000-0000-0000-0000-000000000003','Other',1,1,1);
+INSERT INTO public.suppliers(id,organization_id,name,status) VALUES
+ ('95900000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','Core DPP Supplier','active');
+INSERT INTO public.lifecycle_stages(id,organization_id,product_id,supplier_id,stage_name,stage_order,co2_impact_kg,water_usage_l) VALUES
+ ('94000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','93000000-0000-0000-0000-000000000001','95900000-0000-0000-0000-000000000001','Sourcing',1,0,10),
+ ('94000000-0000-0000-0000-000000000002','91000000-0000-0000-0000-000000000001','93000000-0000-0000-0000-000000000001','95900000-0000-0000-0000-000000000001','Making',2,2,20),
+ ('94000000-0000-0000-0000-000000000003','91000000-0000-0000-0000-000000000002','93000000-0000-0000-0000-000000000003',NULL,'Other',1,1,1);
+INSERT INTO public.evidence_uploads(id,organization_id,supplier_id,lifecycle_stage_id,storage_path,document_type,status,uploaded_by,original_filename,mime_type,size_bytes,uploaded_at,reviewed_by,reviewed_at,content_sha256,scan_status,scan_started_at,scan_completed_at,scan_engine,scan_result) VALUES
+ ('96900000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','95900000-0000-0000-0000-000000000001','94000000-0000-0000-0000-000000000001','evidence/96900000-0000-0000-0000-000000000001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.pdf','certificate','approved','90000000-0000-0000-0000-000000000001','core-one.pdf','application/pdf',100,now(),'90000000-0000-0000-0000-000000000001',now(),repeat('e',64),'clean',now(),now(),'test','clean'),
+ ('96900000-0000-0000-0000-000000000002','91000000-0000-0000-0000-000000000001','95900000-0000-0000-0000-000000000001','94000000-0000-0000-0000-000000000002','evidence/96900000-0000-0000-0000-000000000002/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.pdf','certificate','approved','90000000-0000-0000-0000-000000000001','core-two.pdf','application/pdf',100,now(),'90000000-0000-0000-0000-000000000001',now(),repeat('f',64),'clean',now(),now(),'test','clean');
 
 SELECT has_function('public','get_public_product_passport',ARRAY['text'],'public RPC exists');
 SELECT has_function('public','get_product_passport_publication_state',ARRAY['uuid'],'state RPC exists');
@@ -113,6 +118,8 @@ SELECT lives_ok($$SET LOCAL ROLE service_role; UPDATE public.digital_product_pas
 INSERT INTO public.products(id,organization_id,name,sku,season) VALUES
  ('93000000-0000-0000-0000-000000000004','91000000-0000-0000-0000-000000000001','DPP Certification Trust Product','TRUST-1','SS26'),
  ('93000000-0000-0000-0000-000000000005','91000000-0000-0000-0000-000000000001','DPP Other Product','OTHER-1','SS26');
+INSERT INTO public.product_materials(id,product_id,material_name,composition_percentage,certification_required) VALUES
+ ('93100000-0000-0000-0000-000000000004','93000000-0000-0000-0000-000000000004','Organic cotton',100,false);
 INSERT INTO public.suppliers(id,organization_id,name) VALUES
  ('95000000-0000-0000-0000-000000000001','91000000-0000-0000-0000-000000000001','Private Supplier'),
  ('95000000-0000-0000-0000-000000000002','91000000-0000-0000-0000-000000000002','Other Tenant Supplier');
