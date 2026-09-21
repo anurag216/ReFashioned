@@ -8,10 +8,15 @@ test.describe("sustainability truthfulness, reporting and public boundaries", ()
     await page.goto("/traceability");
     const selector = page.getByTestId("select-product");
     await expect(selector).toBeVisible();
-    const options = await selector.locator("option").count();
-    if (!options) test.skip(true, "No live products are available for DPP testing");
-    await page.getByTestId("button-view-dpp").click();
-    await expect(page).toHaveURL(/\/passport\?productId=/);
+    await expect.poll(async () => selector.locator("option").count(), { timeout: 30_000 }).toBeGreaterThan(0);
+    const selectedValue = await selector.inputValue();
+    if (!selectedValue) {
+      await expect.poll(async () => selector.inputValue(), { timeout: 30_000 }).not.toBe("");
+    }
+    const viewDpp = page.getByTestId("button-view-dpp");
+    await expect(viewDpp).toBeEnabled();
+    await viewDpp.click();
+    await expect(page).toHaveURL(/\/passport\?productId=[0-9a-f-]+/);
     await expect(page.getByText("Publication status")).toBeVisible();
     await expect(page.getByRole("heading", { name: /Draft|Published|Updates pending publication|Not publicly accessible/ })).toBeVisible();
   });
