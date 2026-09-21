@@ -357,7 +357,15 @@ export function Traceability({ onViewDPP }: { onViewDPP?: (productId: string) =>
             }
           </select>
           {onViewDPP && (
-            <button onClick={() => onViewDPP(selectedProduct)} data-testid="button-view-dpp" className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0">
+            <button
+              type="button"
+              disabled={productsLoading || !selectedProduct}
+              onClick={() => {
+                if (selectedProduct) onViewDPP(selectedProduct);
+              }}
+              data-testid="button-view-dpp"
+              className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+            >
               <FileCheck className="w-4 h-4" /> View DPP
             </button>
           )}
